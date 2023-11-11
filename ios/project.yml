@@ -1,0 +1,40 @@
+name: ${APP_NAME}
+options:
+  bundleIdPrefix: com.example
+
+settings:
+  base:
+    GENERATE_INFOPLIST_FILE: YES
+    OTHER_LDFLAGS: 
+      - -L${SOURCE_ROOT}/lib
+    CURRENT_PROJECT_VERSION: 1.0.0
+    MARKETING_VERSION: 1.0.0
+  configs:
+    debug:
+      CODE_SIGNING_ALLOWED: NO
+
+targets:
+  MyApp:
+    type: application
+    platform: iOS
+    deploymentTarget: "12.0"
+    info:
+      path: ../zig-out/Info.plist
+      properties:
+        UILaunchScreen:
+          UIColorName: blue 
+    sources:
+      - path: src/
+    dependencies:
+      - framework: ${APP_LIB}
+        embed: false
+        link: true
+      - framework: ${SOKOL_LIB}
+        embed: false
+        link: true
+      - sdk: Metal.framework
+      - sdk: MetalKit.framework
+      - sdk: UIKit.framework
+      - sdk: Foundation.framework
+      - sdk: AVFoundation.framework
+      - sdk: AudioToolbox.framework
