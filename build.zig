@@ -116,14 +116,18 @@ pub fn build(b: *Build.Builder) !void {
     generate_xcode_proj.setEnvironmentVariable("APP_NAME", APP_NAME);
     generate_xcode_proj.setEnvironmentVariable("BUNDLE_PREFIX", BUNDLE_PREFIX);
     generate_xcode_proj.expectExitCode(0);
+    generate_xcode_proj.step.dependOn(&generate_ios_app_framework.step);
+    generate_xcode_proj.step.dependOn(&generate_ios_sokol_framework.step);
 
-    // build iOS app with xcodebuild and the generated xcode project
-    const xcodebuild = b.addSystemCommand(
-        &.{ "xcodebuild", "-project", b.pathJoin(&.{ b.install_prefix, APP_NAME ++ ".xcodeproj" }), "-target", APP_NAME },
-    );
-    xcodebuild.step.dependOn(&generate_xcode_proj.step);
-    xcodebuild.step.dependOn(&generate_ios_app_framework.step);
-    xcodebuild.step.dependOn(&generate_ios_sokol_framework.step);
+    // !! can't build since no team specified in xcode project !!
+
+    // // build iOS app with xcodebuild and the generated xcode project
+    // const xcodebuild = b.addSystemCommand(
+    //     &.{ "xcodebuild", "-project", b.pathJoin(&.{ b.install_prefix, APP_NAME ++ ".xcodeproj" }), "-target", APP_NAME },
+    // );
+    // xcodebuild.step.dependOn(&generate_xcode_proj.step);
+    // xcodebuild.step.dependOn(&generate_ios_app_framework.step);
+    // xcodebuild.step.dependOn(&generate_ios_sokol_framework.step);
 
     // android
     const install_keystore = generateAndroidKeyStore(b);
@@ -148,8 +152,8 @@ pub fn build(b: *Build.Builder) !void {
     const install_default_exe = b.addInstallArtifact(default_exe, .{});
 
     // entrypoint build steps
-    const install_ios = b.step("ios", "Build iOS project");
-    install_ios.dependOn(&xcodebuild.step);
+    const install_ios = b.step("ios", "Setup iOS project");
+    install_ios.dependOn(&generate_xcode_proj.step);
 
     const install_default = b.step("default", "Build binaries for the current system (or specified in command)");
     install_default.dependOn(&install_default_exe.step);
