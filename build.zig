@@ -203,6 +203,7 @@ fn buildSokolLib(
     const name = b.fmt("libsokol" ++ "_{s}.a", .{triple});
 
     const lib = sokol.buildSokol(b, target, optimize, .{}, "deps/sokol-zig/");
+    lib.defineCMacro("SOKOL_REMOVE_MAIN_STUB", "1");
     try addCompilePaths(b, target, lib);
     const install_lib = b.addInstallArtifact(lib, .{ .dest_sub_path = name });
 
