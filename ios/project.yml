@@ -1,6 +1,6 @@
 name: ${APP_NAME}
 options:
-  bundleIdPrefix: com.example
+  bundleIdPrefix: ${BUNDLE_PREFIX}
 
 settings:
   base:

@@ -4,6 +4,7 @@
 //  Shader with uniform data.
 //------------------------------------------------------------------------------
 const sokol = @import("sokol");
+const std = @import("std");
 const slog = sokol.log;
 const sg = sokol.gfx;
 const sapp = sokol.app;
@@ -113,17 +114,31 @@ export fn cleanup() void {
     sg.shutdown();
 }
 
+export const app_descriptor: sapp.Desc = .{
+    .init_cb = init,
+    .frame_cb = frame,
+    .cleanup_cb = cleanup,
+    .high_dpi = true,
+    .sample_count = 4,
+    .icon = .{ .sokol_default = true },
+    .window_title = "cube.zig",
+    .logger = .{ .func = slog.func },
+    .width = 400,
+    .height = 400,
+};
+
 pub fn main() void {
-    sapp.run(.{
-        .init_cb = init,
-        .frame_cb = frame,
-        .cleanup_cb = cleanup,
-        .high_dpi = true,
-        .sample_count = 4,
-        .icon = .{ .sokol_default = true },
-        .window_title = "cube.zig",
-        .logger = .{ .func = slog.func },
+    sapp.run(app_descriptor);
+}
+
+export fn sokol_main() sapp.Desc {
+    std.debug.print("[cube.zig] Returning descriptor:\n\twindow_title=\"{s}\"\n\twidth={}\n\theight={}\n", .{
+        app_descriptor.window_title,
+        app_descriptor.width,
+        app_descriptor.height,
     });
+
+    return app_descriptor;
 }
 
 fn computeVsParams(rx: f32, ry: f32) shd.VsParams {
