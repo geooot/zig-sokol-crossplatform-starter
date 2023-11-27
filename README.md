@@ -20,7 +20,7 @@ For iOS
 For Android
 - [Android SDK](https://developer.android.com/studio) install with `ANDROID_HOME` environment variable set. 
 - Java JDK, and `keytool` (should be included in JDK install). `$JAVA_HOME` should be set to the install location
-- `[bundletool](https://github.com/google/bundletool)`, which can be installed with `brew install bundletool`.
+- [`bundletool`](https://github.com/google/bundletool), which can be installed with `brew install bundletool`.
 - Edit `build.zig` with `ANDROID_` prefixed constants as necessary. You probably only need to change `*_VERSION` const's to match what you have installed in your android SDK (check `$ANDROID_HOME`).
 - Edit `build.zig` with `APP_NAME` and `BUNDLE_PREFIX` changed as necessary.
 
