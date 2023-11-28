@@ -5,13 +5,14 @@ Also, inspiration from [kubkon/zig-ios-example](https://github.com/kubkon/zig-io
 <video src="https://github.com/geooot/zig-sokol-crossplatform-starter/assets/7832610/a364499c-ed60-4376-89fa-d8c9171fcaad" muted autoplay loop></video>
 
 ## Clone
-Make sure to include submodules
+> [!IMPORTANT]  
+> This projects uses submodules. Make sure to include them.
 
 ```
 git clone --recurse-submodules https://github.com/geooot/zig-sokol-crossplatform-starter.git
 ```
 
-## Dependencies
+## Required Dependencies
 For iOS
 - xcode
 - `xcodegen`, which can be installed with `brew install xcodegen`
@@ -28,7 +29,9 @@ For PC/Mac
 - Nothing! Just `zig build run`.
 
 ## Build and Run
-```
+Make sure to perform the edits and get the dependencies described in ["Required Dependencies"](#Required-Dependencies) before continuing below.
+
+```sh
 $ zig build run      # builds and runs executable on your computer
 
 $ zig build          # builds everything (iOS, android, your computer)
