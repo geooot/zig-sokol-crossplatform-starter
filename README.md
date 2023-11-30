@@ -15,7 +15,7 @@ git clone --recurse-submodules https://github.com/geooot/zig-sokol-crossplatform
 ## Required Dependencies
 For iOS
 - xcode
-- `xcodegen`, which can be installed with `brew install xcodegen`
+- [`xcodegen`](https://github.com/yonaskolb/XcodeGen), which can be installed with `brew install xcodegen`
 - Edit `build.zig` with `APP_NAME` and `BUNDLE_PREFIX` changed as necessary.
 
 For Android
