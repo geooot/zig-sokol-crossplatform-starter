@@ -496,7 +496,7 @@ fn generateAndroidAppSecondPreBundle(b: *Build.Builder, generate_pre_bundle_step
     copyRes.step.dependOn(&wf.step);
 
     var zip_files = b.addSystemCommand(&.{ "zip", "-D4r" });
-    var output_zip = zip_files.addOutputFileArg("output_part2.zip");
+    const output_zip = zip_files.addOutputFileArg("output_part2.zip");
     zip_files.addArg(".");
     zip_files.step.dependOn(&copyRes.step);
     zip_files.step.dependOn(&wf.step);
@@ -520,7 +520,7 @@ fn generateAndroidAppBundle(b: *Build.Builder, android_app_second_bundle: Androi
     generate_app_bundle_cmd.step.dependOn(android_app_second_bundle.step);
     generate_app_bundle_cmd.addFileArg(android_app_second_bundle.second_bundle_artifact);
     generate_app_bundle_cmd.addArg("--output");
-    var output_aab = generate_app_bundle_cmd.addOutputFileArg(APP_NAME ++ ".aab");
+    const output_aab = generate_app_bundle_cmd.addOutputFileArg(APP_NAME ++ ".aab");
 
     return .{ .step = &generate_app_bundle_cmd.step, .aab_artifact = output_aab };
 }
@@ -542,7 +542,7 @@ fn generateAndroidApks(b: *Build.Builder, install_keystore: InstallAndroidKeySto
     generate_app_bundle_cmd.step.dependOn(install_android_app_bundle.step);
     generate_app_bundle_cmd.addFileArg(install_android_app_bundle.aab_artifact);
     generate_app_bundle_cmd.addArg("--output");
-    var output_apks = generate_app_bundle_cmd.addOutputFileArg(APP_NAME ++ ".apks");
+    const output_apks = generate_app_bundle_cmd.addOutputFileArg(APP_NAME ++ ".apks");
     const install_apks = b.addInstallFile(output_apks, APP_NAME ++ ".apks");
     install_apks.step.dependOn(&generate_app_bundle_cmd.step);
     return install_apks;

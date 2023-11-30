@@ -132,12 +132,6 @@ pub fn main() void {
 }
 
 export fn sokol_main() sapp.Desc {
-    std.debug.print("[cube.zig] Returning descriptor:\n\twindow_title=\"{s}\"\n\twidth={}\n\theight={}\n", .{
-        app_descriptor.window_title,
-        app_descriptor.width,
-        app_descriptor.height,
-    });
-
     return app_descriptor;
 }
 
