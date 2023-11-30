@@ -41,7 +41,7 @@ fn make(step: *Step, prog_node: *std.Progress.Node) !void {
 
     const dir_path = self.directory.getPath(step.owner);
 
-    var dir = try fs.openIterableDirAbsolute(dir_path, .{});
+    var dir = try fs.openDirAbsolute(dir_path, .{});
     defer dir.close();
 
     var iter = dir.iterate();
