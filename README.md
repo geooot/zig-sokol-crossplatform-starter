@@ -47,3 +47,7 @@ $ zig build android  # builds android apks (in zig-out/MyApp.apks).
 
 $ zig build default  # builds a executable for your computer
 ```
+
+## License
+
+This is Public Domain software with the UNLICENSE license. However, `build/auto-detect.zig` fall under the MIT License.
