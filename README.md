@@ -13,6 +13,8 @@ git clone --recurse-submodules https://github.com/geooot/zig-sokol-crossplatform
 ```
 
 ## Required Dependencies
+A very recent version of `zig`. I'm using `0.12.0-dev.1767+1e42a3de8`.
+
 For iOS
 - xcode
 - [`xcodegen`](https://github.com/yonaskolb/XcodeGen), which can be installed with `brew install xcodegen`
