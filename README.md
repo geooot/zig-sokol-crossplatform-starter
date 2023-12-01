@@ -2,7 +2,7 @@
 A template for an app that runs on iOS, Android, PC and Mac. Built using [the Zig programming language](https://ziglang.org), and using the [`floooh/sokol`](https://github.com/floooh/sokol) graphics/app library.
 Also, taken inspiration from [`kubkon/zig-ios-example`](https://github.com/kubkon/zig-ios-example), [`MasterQ32/ZigAndroidTemplate`](https://github.com/MasterQ32/ZigAndroidTemplate), and [`cnlohr/rawdrawandroid`](https://github.com/cnlohr/rawdrawandroid)
 
-<video src="https://github.com/geooot/zig-sokol-crossplatform-starter/assets/7832610/db3c62de-4af9-4dcf-b268-07aed5d47c3a" muted autoplay loop></video>
+<video src="https://github.com/geooot/zig-sokol-crossplatform-starter/assets/7832610/3d7cbba5-28a3-4ad1-bc0e-4f22af35d73c" muted autoplay loop></video>
 
 ## Clone
 > [!IMPORTANT]  
