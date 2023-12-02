@@ -66,58 +66,72 @@ pub fn build(b: *Build.Builder) !void {
     const default_build_lib = try buildAppLib(b, default_target, optimize);
     const default_sokol_lib = try buildSokolLib(b, default_target, optimize);
 
-    const ios_build_lib_install_path = b.pathJoin(&.{ b.lib_dir, ios_build_lib.dest_sub_path });
-    const ios_sim_build_lib_install_path = b.pathJoin(&.{ b.lib_dir, ios_sim_build_lib.dest_sub_path });
-    const ios_sokol_lib_install_path = b.pathJoin(&.{ b.lib_dir, ios_sokol_lib.dest_sub_path });
-    const ios_sim_sokol_lib_install_path = b.pathJoin(&.{ b.lib_dir, ios_sim_sokol_lib.dest_sub_path });
-    const ios_app_framework_install_path = b.pathJoin(&.{ b.lib_dir, "ios_lib" ++ APP_NAME ++ ".xcframework" });
-    const ios_sokol_framework_install_path = b.pathJoin(&.{ b.lib_dir, "ios_libsokol.xcframework" });
-
     // generate iOS framework files
-    const delete_old_framework_files = b.addSystemCommand(
-        &.{ "rm", "-rf", ios_app_framework_install_path, ios_sokol_framework_install_path },
-    );
+    const ios_build_lib_name = "ios_lib" ++ APP_NAME ++ ".xcframework";
+    const ios_sokol_lib_name = "ios_libsokol.xcframework";
 
     const generate_ios_app_framework = b.addSystemCommand(&.{
         "xcodebuild",
         "-create-xcframework",
         "-library",
-        ios_build_lib_install_path,
-        "-library",
-        ios_sim_build_lib_install_path,
-        "-output",
-        ios_app_framework_install_path,
     });
+    generate_ios_app_framework.addFileArg(ios_build_lib.artifact.getEmittedBin());
+    generate_ios_app_framework.addArg("-library");
+    generate_ios_app_framework.addFileArg(ios_sim_build_lib.artifact.getEmittedBin());
+    generate_ios_app_framework.addArg("-output");
+    const ios_app_framework = generate_ios_app_framework.addOutputFileArg(ios_build_lib_name);
     generate_ios_app_framework.step.dependOn(&ios_build_lib.step);
     generate_ios_app_framework.step.dependOn(&ios_sim_build_lib.step);
-    generate_ios_app_framework.step.dependOn(&delete_old_framework_files.step);
+
     const generate_ios_sokol_framework = b.addSystemCommand(&.{
         "xcodebuild",
         "-create-xcframework",
         "-library",
-        ios_sokol_lib_install_path,
-        "-library",
-        ios_sim_sokol_lib_install_path,
-        "-output",
-        ios_sokol_framework_install_path,
     });
+    generate_ios_sokol_framework.addFileArg(ios_sokol_lib.artifact.getEmittedBin());
+    generate_ios_sokol_framework.addArg("-library");
+    generate_ios_sokol_framework.addFileArg(ios_sim_sokol_lib.artifact.getEmittedBin());
+    generate_ios_sokol_framework.addArg("-output");
+    const ios_sokol_framework = generate_ios_sokol_framework.addOutputFileArg(ios_sokol_lib_name);
     generate_ios_sokol_framework.step.dependOn(&ios_sokol_lib.step);
     generate_ios_sokol_framework.step.dependOn(&ios_sim_sokol_lib.step);
-    generate_ios_sokol_framework.step.dependOn(&delete_old_framework_files.step);
+
+    // create folder structure for xcode project
+    const xcode_proj = b.addWriteFiles();
+    const project_yml_loc = xcode_proj.addCopyFile(.{ .path = b.pathJoin(&.{ "ios", "project.yml" }) }, "project.yml");
+
+    const copy_app_ios_sources = b.addSystemCommand(&.{ "cp", "-r" });
+    copy_app_ios_sources.addDirectoryArg(.{ .path = b.pathJoin(&.{ "ios", "src" }) });
+    copy_app_ios_sources.addDirectoryArg(xcode_proj.getDirectory());
+    copy_app_ios_sources.step.dependOn(&xcode_proj.step);
+
+    const copy_app_framework = b.addSystemCommand(&.{ "cp", "-r" });
+    copy_app_framework.addDirectoryArg(ios_app_framework);
+    copy_app_framework.addDirectoryArg(xcode_proj.getDirectory());
+    copy_app_framework.step.dependOn(&xcode_proj.step);
+
+    const copy_sokol_framework = b.addSystemCommand(&.{ "cp", "-r" });
+    copy_sokol_framework.addDirectoryArg(ios_sokol_framework);
+    copy_sokol_framework.addDirectoryArg(xcode_proj.getDirectory());
+    copy_sokol_framework.step.dependOn(&xcode_proj.step);
 
     // generate xcode project
-    const project_yml_loc = b.pathJoin(&.{ "ios", "project.yml" });
     const generate_xcode_proj = b.addSystemCommand(&.{ "xcodegen", "generate", "--spec" });
-    generate_xcode_proj.addFileArg(.{ .path = project_yml_loc });
-    generate_xcode_proj.addArg("--project");
-    generate_xcode_proj.addDirectoryArg(.{ .path = b.install_prefix });
-    generate_xcode_proj.setEnvironmentVariable("APP_LIB", ios_app_framework_install_path);
-    generate_xcode_proj.setEnvironmentVariable("SOKOL_LIB", ios_sokol_framework_install_path);
+    generate_xcode_proj.addFileArg(project_yml_loc);
+    generate_xcode_proj.setEnvironmentVariable("APP_LIB", ios_build_lib_name);
+    generate_xcode_proj.setEnvironmentVariable("SOKOL_LIB", ios_sokol_lib_name);
     generate_xcode_proj.setEnvironmentVariable("APP_NAME", APP_NAME);
     generate_xcode_proj.setEnvironmentVariable("BUNDLE_PREFIX", BUNDLE_PREFIX);
+    generate_xcode_proj.setCwd(xcode_proj.getDirectory());
     generate_xcode_proj.expectExitCode(0);
     generate_xcode_proj.step.dependOn(&generate_ios_app_framework.step);
     generate_xcode_proj.step.dependOn(&generate_ios_sokol_framework.step);
+    generate_xcode_proj.step.dependOn(&copy_app_ios_sources.step);
+    generate_xcode_proj.step.dependOn(&copy_app_framework.step);
+    generate_xcode_proj.step.dependOn(&copy_sokol_framework.step);
+
+    const output_xcode_project = b.addInstallDirectory(.{ .source_dir = xcode_proj.getDirectory(), .install_dir = .{ .custom = "" }, .install_subdir = "ios" });
+    output_xcode_project.step.dependOn(&generate_xcode_proj.step);
 
     // !! can't build since no team specified in xcode project !!
 
@@ -154,7 +168,7 @@ pub fn build(b: *Build.Builder) !void {
 
     // entrypoint build steps
     const install_ios = b.step("ios", "Setup iOS project");
-    install_ios.dependOn(&generate_xcode_proj.step);
+    install_ios.dependOn(&output_xcode_project.step);
 
     const install_default = b.step("default", "Build binaries for the current system (or specified in command)");
     install_default.dependOn(&install_default_exe.step);
@@ -303,8 +317,8 @@ const InstallAndroidKeyStore = struct {
     step: *Build.Step,
     keystore_artifact: Build.LazyPath,
 };
-fn generateAndroidKeyStore(b: *Build.Builder) InstallAndroidKeyStore {
-    const generate_key_store = b.addSystemCommand(&.{ "keytool", "-genkey", "-noprompt", "-keystore" });
+fn generateAndroidKeyStore(b: *Build.Builder, keytool_exe: []const u8) InstallAndroidKeyStore {
+    const generate_key_store = b.addSystemCommand(&.{ keytool_exe, "-genkey", "-noprompt", "-keystore" });
     generate_key_store.setName("Generate keystore");
     const keystore_artifact = generate_key_store.addOutputFileArg(APP_NAME ++ ".keystore");
     generate_key_store.addArgs(&.{
