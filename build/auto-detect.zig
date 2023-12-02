@@ -15,9 +15,13 @@ pub const ToolchainVersions = struct {
 };
 
 pub const AndroidSDKConfig = struct {
+    valid_config: bool = true,
+
     android_sdk_root: []const u8 = "",
     android_ndk_root: []const u8 = "",
     java_home: []const u8 = "",
+
+    keytool_path: []const u8 = "",
 
     android_ndk_include: []const u8 = "",
     android_ndk_include_android: []const u8 = "",
@@ -27,20 +31,19 @@ pub const AndroidSDKConfig = struct {
     android_ndk_lib_host_arch_android: []const u8 = "",
 };
 
+var config: AndroidSDKConfig = .{};
+
 pub fn findAndroidSDKConfig(b: *Builder, target: *const std.zig.CrossTarget, versions: ToolchainVersions) !AndroidSDKConfig {
-    // var str_buf: [5]u8 = undefined;
-    print("build_tools_version {s}, ndk_version {s}\n", .{ versions.build_tools_version, versions.build_tools_version });
-
-    var config = AndroidSDKConfig{};
-
-    // try to find the android home
-    const android_home_val = std.process.getEnvVarOwned(b.allocator, "ANDROID_HOME") catch "";
-    if (android_home_val.len > 0) {
-        if (findProblemWithAndroidSdk(b, versions, android_home_val)) |problem| {
-            print("Cannot use ANDROID_HOME ({s}):\n    {s}\n", .{ android_home_val, problem });
-        } else {
-            print("Using android sdk at ANDROID_HOME: {s}\n", .{android_home_val});
-            config.android_sdk_root = android_home_val;
+    if (config.android_sdk_root.len == 0) {
+        // try to find the android home
+        const android_home_val = std.process.getEnvVarOwned(b.allocator, "ANDROID_HOME") catch "";
+        if (android_home_val.len > 0) {
+            if (findProblemWithAndroidSdk(b, versions, android_home_val)) |problem| {
+                print("Cannot use ANDROID_HOME ({s}):\n    {s}\n", .{ android_home_val, problem });
+            } else {
+                print("Using android sdk at ANDROID_HOME: {s}\n", .{android_home_val});
+                config.android_sdk_root = android_home_val;
+            }
         }
     }
 
@@ -79,13 +82,15 @@ pub fn findAndroidSDKConfig(b: *Builder, target: *const std.zig.CrossTarget, ver
 
     // Next up, NDK.
     // first, check ANDROID_NDK_ROOT
-    const ndk_root_val = std.process.getEnvVarOwned(b.allocator, "ANDROID_NDK_ROOT") catch "";
-    if (ndk_root_val.len > 0) {
-        if (findProblemWithAndroidNdk(b, versions, ndk_root_val)) |problem| {
-            print("Cannot use ANDROID_NDK_ROOT ({s}):\n    {s}\n", .{ ndk_root_val, problem });
-        } else {
-            print("Using android ndk at ANDROID_NDK_ROOT: {s}\n", .{ndk_root_val});
-            config.android_ndk_root = ndk_root_val;
+    if (config.android_ndk_root.len == 0) {
+        const ndk_root_val = std.process.getEnvVarOwned(b.allocator, "ANDROID_NDK_ROOT") catch "";
+        if (ndk_root_val.len > 0) {
+            if (findProblemWithAndroidNdk(b, versions, ndk_root_val)) |problem| {
+                print("Cannot use ANDROID_NDK_ROOT ({s}):\n    {s}\n", .{ ndk_root_val, problem });
+            } else {
+                print("Using android ndk at ANDROID_NDK_ROOT: {s}\n", .{ndk_root_val});
+                config.android_ndk_root = ndk_root_val;
+            }
         }
     }
 
@@ -106,7 +111,7 @@ pub fn findAndroidSDKConfig(b: *Builder, target: *const std.zig.CrossTarget, ver
         }
     }
 
-    // Finally, we need to find the JDK, for jarsigner.
+    // Finally, we need to find the JDK, for keytool.
     // Check the JAVA_HOME variable
     if (config.java_home.len == 0) {
         const java_home_value = std.process.getEnvVarOwned(b.allocator, "JAVA_HOME") catch "";
@@ -120,9 +125,9 @@ pub fn findAndroidSDKConfig(b: *Builder, target: *const std.zig.CrossTarget, ver
         }
     }
 
-    // Look for `where jarsigner`
+    // Look for `where keytool`
     if (config.java_home.len == 0) {
-        if (findProgramPath(b.allocator, "jarsigner")) |path| {
+        if (findProgramPath(b.allocator, "keytool")) |path| {
             const sep = std.fs.path.sep;
             if (std.mem.lastIndexOfScalar(u8, path, sep)) |last_slash| {
                 if (std.mem.lastIndexOfScalar(u8, path[0..last_slash], sep)) |second_slash| {
@@ -143,6 +148,7 @@ pub fn findAndroidSDKConfig(b: *Builder, target: *const std.zig.CrossTarget, ver
         config.android_ndk_root.len == 0 or
         config.java_home.len == 0)
     {
+        config.valid_config = false;
         if (config.android_sdk_root.len == 0) {
             print("Android SDK root is missing. Edit the config file, or set ANDROID_SDK_ROOT to your android install.\n", .{});
             print("You will need build tools version {s} and android sdk platform {s}\n\n", .{ versions.build_tools_version, "TODO: ???" });
@@ -158,8 +164,6 @@ pub fn findAndroidSDKConfig(b: *Builder, target: *const std.zig.CrossTarget, ver
             }
             print("\n", .{});
         }
-
-        std.os.exit(1);
     }
 
     const target_dir_name = switch (target.cpu_arch.?) {
@@ -167,6 +171,7 @@ pub fn findAndroidSDKConfig(b: *Builder, target: *const std.zig.CrossTarget, ver
         .x86_64 => "x86_64-linux-android",
         else => @panic("unsupported arch for android build"),
     };
+    const keytool_path = b.pathJoin(&.{ config.java_home, "bin", "keytool" ++ if (builtin.os.tag == .windows) ".exe" else "" });
     const ndk_root = config.android_ndk_root;
     const ndk_include = b.pathJoin(&.{ ndk_root, "/sysroot/usr/include" });
     const ndk_include_android = b.pathJoin(&.{ ndk_include, "android" });
@@ -176,6 +181,7 @@ pub fn findAndroidSDKConfig(b: *Builder, target: *const std.zig.CrossTarget, ver
     const ndk_include_host_arch_android = b.pathJoin(&.{ ndk_include_host, target_dir_name });
     const ndk_lib_host_arch_android = b.pathJoin(&.{ ndk_sysroot, "/usr/lib", target_dir_name, versions.api_version });
 
+    config.keytool_path = keytool_path;
     config.android_ndk_root = ndk_root;
     config.android_ndk_include = ndk_include;
     config.android_ndk_include_android = ndk_include_android;
@@ -296,10 +302,9 @@ fn findProblemWithJdk(b: *Builder, path: []const u8) ?[]const u8 {
         return b.fmt("Cannot access {s}, {s}", .{ path, @errorName(err) });
     };
 
-    const target_executable = if (builtin.os.tag == .windows) "bin\\jarsigner.exe" else "bin/jarsigner";
-    const target_path = pathConcat(b, path, target_executable);
+    const target_path = b.pathJoin(&.{ path, "bin", "keytool" ++ if (builtin.os.tag == .windows) ".exe" else "" });
     std.fs.cwd().access(target_path, .{}) catch |err| {
-        return b.fmt("Cannot access jarsigner, {s}", .{@errorName(err)});
+        return b.fmt("Cannot access keytool, {s}", .{@errorName(err)});
     };
 
     return null;

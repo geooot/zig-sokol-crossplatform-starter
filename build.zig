@@ -130,9 +130,10 @@ pub fn build(b: *Build.Builder) !void {
     // xcodebuild.step.dependOn(&generate_ios_sokol_framework.step);
 
     // android
-    const install_keystore = generateAndroidKeyStore(b);
+    const install_keystore = generateAndroidKeyStore(b, android_sdk.keytool_path);
 
     var permissions = std.ArrayList([]const u8).init(b.allocator);
+    defer permissions.deinit();
     try permissions.append("android.permission.SET_RELEASE_APP");
     try permissions.append("android.permission.INTERNET");
     try permissions.append("android.permission.ACCESS_NETWORK_STATE");
