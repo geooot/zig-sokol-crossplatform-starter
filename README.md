@@ -1,10 +1,12 @@
 # zig-sokol-crossplatform-starter
+
 A template for an app that runs on iOS, Android, PC and Mac. Built using [the Zig programming language](https://ziglang.org), and using the [`floooh/sokol`](https://github.com/floooh/sokol) graphics/app library.
 Also, taken inspiration from [`kubkon/zig-ios-example`](https://github.com/kubkon/zig-ios-example), [`MasterQ32/ZigAndroidTemplate`](https://github.com/MasterQ32/ZigAndroidTemplate), and [`cnlohr/rawdrawandroid`](https://github.com/cnlohr/rawdrawandroid)
 
 <video src="https://github.com/geooot/zig-sokol-crossplatform-starter/assets/7832610/3d7cbba5-28a3-4ad1-bc0e-4f22af35d73c" muted autoplay loop></video>
 
 ## Clone
+
 > [!IMPORTANT]  
 > This projects uses submodules. Make sure to include them.
 
@@ -35,6 +37,7 @@ For PC/Mac
 - Nothing! Just `zig build run`.
 
 ## Build and Run
+
 Make sure to perform the edits and get the dependencies described in ["Required Dependencies"](#Required-Dependencies) before continuing below.
 
 ```sh
@@ -47,10 +50,31 @@ $ zig build ios      # generates iOS project (in zig-out/MyApp.xcodeproj).
 
 $ zig build android  # builds android apks (in zig-out/MyApp.apks).
                      # You have to use `bundletool install-apks --apks=MyApp.apks` to install it to a device.
-                     # But you use the `.apks` file when submitting to Google Play.
+                     # But you use the `.aab` file when submitting to Google Play.
 
 $ zig build default  # builds a executable for your computer
 ```
+
+## Quirks and Features
+
+Features
+- Ability to build for your PC, iOS, and Android
+- Android App Bundle support.
+- XCode project is an artifact. Configuration using YAML instead (thanks to `xcodegen`)
+- Pretty easy to modify build system (thanks to Zig).
+
+Quirks
+- Not really easy to debug for android. Surprisingly the xcode debugger works pretty well.
+
+## Things that would be cool to add in the future
+
+In no particular order
+- Move sokol-zig to be a zig dependency rather than a git submodule
+- Can we get rid of the dependency on `xcodegen` and `bundletool`? I think we can at least use zig package manager to fetch those dependencies on build. We need zip support (xcodegen releases itself as a zip file rather than a tarball) and single file download support (bundletool packages itself as a single `.jar`) to make that possible. 
+   - Even crazier idea: reimplement `xcodegen` and `bundletool` as zig libraries.
+- In my sleep I still think about `kubkon/zig-ios-example` since it doesn't require generating a xcode project at all. I think in reality, people might need **some** xcode project generation support, but like...
+- Github Action CI/CD workflows.
+- Add minimal WASM/WASI builds (lets move past emscripten).
 
 ## License
 
