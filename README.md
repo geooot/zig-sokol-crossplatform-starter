@@ -51,4 +51,6 @@ $ zig build default  # builds a executable for your computer
 
 ## License
 
-This is Public Domain software with the UNLICENSE license. However, `build/auto-detect.zig` fall under the MIT License.
+This is Public Domain software with the UNLICENSE license. All code except for the following exceptions are under the UNLICENSE license.
+- `build/auto-detect.zig` falls under the MIT License [[See here]](https://github.com/MasterQ32/ZigAndroidTemplate/blob/master/LICENCE).
+- `deps/sokol-zig` (and sokol in general) fall under the Zlib license [[[See here]]](https://github.com/floooh/sokol/blob/master/LICENSE).
