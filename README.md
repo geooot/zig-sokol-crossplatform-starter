@@ -14,7 +14,10 @@ git clone --recurse-submodules https://github.com/geooot/zig-sokol-crossplatform
 
 ## Required Dependencies
 
-So here's the thing. Currently the latest nightly version of zig will not work with this project. You need to have a version of zig [with this PR's changes merged in](https://github.com/ziglang/zig/pull/18170). At some point this worked with an older nightly but I forgot the version, my bad! Hopefully soon a new nightly will work with this.
+So here's the thing. Currently the latest nightly version of zig will not work with this project. You need to have a recent `0.12.x` nightly version of Zig [with this PR's changes merged in](https://github.com/ziglang/zig/pull/18170).
+At some point this worked with an older nightly but I forgot the version, my bad! Hopefully soon a new nightly will work with this.
+
+If you just care about building for iOS, the latest `0.12.x` nightly should work (last tested with version `0.12.0-dev.1773+8a8fd47d2`). 
 
 For iOS
 - xcode
