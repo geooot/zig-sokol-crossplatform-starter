@@ -66,6 +66,7 @@ Features
 
 Quirks
 - Not really easy to debug for android. Surprisingly the xcode debugger works pretty well.
+- Still need XCode to finish the build for iOS. It's needed for code signing and final linking.
 
 ## Things that would be cool to add in the future
 
