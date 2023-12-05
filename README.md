@@ -62,6 +62,7 @@ Features
 - Android App Bundle support.
 - XCode project is an artifact. Configuration using YAML instead (thanks to `xcodegen`)
 - Pretty easy to modify build system (thanks to Zig).
+- Small binaries, fast loading times!
 
 Quirks
 - Not really easy to debug for android. Surprisingly the xcode debugger works pretty well.
