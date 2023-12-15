@@ -188,6 +188,16 @@ pub fn build(b: *Build.Builder) !void {
     b.default_step = all_step;
 }
 
+fn getEntrypointFile(target: std.zig.CrossTarget) ![]const u8 {
+    const native_target_info = try std.zig.system.NativeTargetInfo.detect(target);
+    var entrypoint: []const u8 = "main.zig";
+
+    if (native_target_info.target.isAndroid()) {
+        entrypoint = "main.android.zig";
+    }
+    return entrypoint;
+}
+
 fn buildExe(b: *Build.Builder, target: std.zig.CrossTarget, optimize: std.builtin.OptimizeMode, sokol_lib: *Build.Step.InstallArtifact, app_lib: *Build.Step.InstallArtifact) !*Build.CompileStep {
     const triple = try target.zigTriple(b.allocator);
     const name = b.fmt(APP_NAME ++ "_{s}", .{triple});
@@ -205,7 +215,9 @@ fn buildAppLib(
     const triple = try target.zigTriple(b.allocator);
     const name = b.fmt(APP_NAME ++ "_{s}", .{triple});
 
-    const lib = b.addStaticLibrary(.{ .name = name, .target = target, .optimize = optimize, .root_source_file = .{ .path = "core/main.zig" } });
+    const entrypoint = try getEntrypointFile(target);
+
+    const lib = b.addStaticLibrary(.{ .name = name, .target = target, .optimize = optimize, .root_source_file = .{ .path = entrypoint } });
     const sokol_module = b.addModule("sokol", .{ .source_file = .{ .path = "deps/sokol-zig/src/sokol/sokol.zig" } });
     lib.addModule("sokol", sokol_module);
     const install_lib = b.addInstallArtifact(lib, .{});
@@ -222,7 +234,6 @@ fn buildSokolLib(
     const name = b.fmt("libsokol" ++ "_{s}.a", .{triple});
 
     const lib = sokol.buildSokol(b, target, optimize, .{}, "deps/sokol-zig/");
-    lib.defineCMacro("SOKOL_REMOVE_MAIN_STUB", "1");
     try addCompilePaths(b, target, lib);
     const install_lib = b.addInstallArtifact(lib, .{ .dest_sub_path = name });
 
@@ -280,6 +291,8 @@ fn addCompilePaths(b: *Build.Builder, target: std.zig.CrossTarget, step: *Build.
         step.addIncludePath(.{ .path = android_sdk.android_ndk_include_host_arch_android });
 
         step.defineCMacro("ANDROID", null);
+        step.defineCMacro("__ANDROID__", null);
+
         step.linkLibC();
 
         step.addLibraryPath(.{ .path = android_sdk.android_ndk_lib_host_arch_android });

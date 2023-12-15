@@ -114,7 +114,7 @@ export fn cleanup() void {
     sg.shutdown();
 }
 
-export const app_descriptor: sapp.Desc = .{
+pub export const app_descriptor: sapp.Desc = .{
     .init_cb = init,
     .frame_cb = frame,
     .cleanup_cb = cleanup,
@@ -126,14 +126,6 @@ export const app_descriptor: sapp.Desc = .{
     .width = 400,
     .height = 400,
 };
-
-pub fn main() void {
-    sapp.run(app_descriptor);
-}
-
-export fn sokol_main() sapp.Desc {
-    return app_descriptor;
-}
 
 fn computeVsParams(rx: f32, ry: f32) shd.VsParams {
     const rxm = mat4.rotate(rx, .{ .x = 1.0, .y = 0.0, .z = 0.0 });
