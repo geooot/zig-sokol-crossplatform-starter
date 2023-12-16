@@ -49,15 +49,13 @@ pub fn build(b: *Build.Builder) !void {
     const ios_sim_build_lib = try buildAppLib(b, ios_sim_target, optimize);
     const ios_sim_sokol_lib = try buildSokolLib(b, ios_sim_target, optimize);
 
-    const android_build_lib = try buildAppLib(b, android_arm64_target, optimize);
     const android_sokol_lib = try buildSokolLib(b, android_arm64_target, optimize);
 
-    const android_combo_lib = try buildComboLib(
+    const android_combo_lib = try buildAppSharedLibWithSokol(
         b,
         android_arm64_target,
         optimize,
         android_sokol_lib,
-        android_build_lib,
     );
 
     android_combo_lib.step.dependOn(&generate_libc_file.step);
@@ -240,23 +238,21 @@ fn buildSokolLib(
     return install_lib;
 }
 
-fn buildComboLib(
+fn buildAppSharedLibWithSokol(
     b: *Build.Builder,
     target: std.zig.CrossTarget,
     optimize: std.builtin.OptimizeMode,
     sokol_lib: *Build.Step.InstallArtifact,
-    app_lib: *Build.Step.InstallArtifact,
 ) !*Build.Step.InstallArtifact {
     const triple = try target.zigTriple(b.allocator);
-    const name = b.fmt(APP_NAME ++ "_withsokol_{s}", .{triple});
+    const name = b.fmt(APP_NAME ++ "_{s}", .{triple});
 
-    const lib = b.addSharedLibrary(.{
-        .name = name,
-        .target = target,
-        .optimize = optimize,
-    });
+    const entrypoint = try getEntrypointFile(target);
+
+    const lib = b.addSharedLibrary(.{ .name = name, .target = target, .optimize = optimize, .root_source_file = .{ .path = entrypoint } });
+    const sokol_module = b.addModule("sokol", .{ .source_file = .{ .path = "deps/sokol-zig/src/sokol/sokol.zig" } });
+    lib.addModule("sokol", sokol_module);
     lib.linkLibrary(sokol_lib.artifact);
-    lib.linkLibrary(app_lib.artifact);
     try addCompilePaths(b, target, lib);
 
     const install_lib = b.addInstallArtifact(lib, .{});
