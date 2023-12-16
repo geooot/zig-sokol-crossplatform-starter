@@ -3,7 +3,7 @@
 A template for an app that runs on iOS, Android, PC and Mac. Built using [the Zig programming language](https://ziglang.org), and using the [`floooh/sokol`](https://github.com/floooh/sokol) graphics/app library.
 Also, taken inspiration from [`kubkon/zig-ios-example`](https://github.com/kubkon/zig-ios-example), [`MasterQ32/ZigAndroidTemplate`](https://github.com/MasterQ32/ZigAndroidTemplate), and [`cnlohr/rawdrawandroid`](https://github.com/cnlohr/rawdrawandroid)
 
-<video src="https://github.com/geooot/zig-sokol-crossplatform-starter/assets/7832610/3d7cbba5-28a3-4ad1-bc0e-4f22af35d73c" muted autoplay loop></video>
+<video src="https://github.com/geooot/zig-sokol-crossplatform-starter/assets/7832610/3d7cbba5-28a3-4ad1-bc0e-4f22af35d73c" muted autoplay loop style="width: 100%"></video>
 
 ## Clone
 
@@ -16,10 +16,7 @@ git clone --recurse-submodules https://github.com/geooot/zig-sokol-crossplatform
 
 ## Required Dependencies
 
-So here's the thing. Currently the latest nightly version of zig will not work with this project. You need to have a recent `0.12.x` nightly version of Zig [with this PR's changes merged in](https://github.com/ziglang/zig/pull/18170).
-At some point this worked with an older nightly but I forgot the version, my bad! Hopefully soon a new nightly will work with this.
-
-If you just care about building for iOS, the latest `0.12.x` nightly should work (last tested with version `0.12.0-dev.1773+8a8fd47d2`). 
+You will need the latest `0.12.x` (master) release of Zig, you can find it [here](https://ziglang.org/download). Last tested with version `0.12.0-dev.1828+225fe6ddb`. 
 
 For iOS
 - xcode
