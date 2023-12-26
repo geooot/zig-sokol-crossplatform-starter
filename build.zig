@@ -61,7 +61,6 @@ pub fn build(b: *Build.Builder) !void {
     android_combo_lib.step.dependOn(&generate_libc_file.step);
     android_combo_lib.artifact.setLibCFile(generate_libc_file.files.getLast().getPath());
 
-    const default_build_lib = try buildAppLib(b, default_target, optimize);
     const default_sokol_lib = try buildSokolLib(b, default_target, optimize);
 
     // generate iOS framework files
@@ -161,7 +160,7 @@ pub fn build(b: *Build.Builder) !void {
     const generate_android_apks = generateAndroidApks(b, install_keystore, generate_android_bundle);
 
     // native build exe
-    const default_exe = try buildExe(b, default_target, optimize, default_sokol_lib, default_build_lib);
+    const default_exe = try buildExe(b, default_target, optimize, default_sokol_lib);
     const install_default_exe = b.addInstallArtifact(default_exe, .{});
 
     // entrypoint build steps
@@ -196,11 +195,20 @@ fn getEntrypointFile(target: std.zig.CrossTarget) ![]const u8 {
     return entrypoint;
 }
 
-fn buildExe(b: *Build.Builder, target: std.zig.CrossTarget, optimize: std.builtin.OptimizeMode, sokol_lib: *Build.Step.InstallArtifact, app_lib: *Build.Step.InstallArtifact) !*Build.CompileStep {
+fn buildExe(
+    b: *Build.Builder,
+    target: std.zig.CrossTarget,
+    optimize: std.builtin.OptimizeMode,
+    sokol_lib: *Build.Step.InstallArtifact,
+) !*Build.CompileStep {
     const triple = try target.zigTriple(b.allocator);
     const name = b.fmt(APP_NAME ++ "_{s}", .{triple});
-    const exe = b.addExecutable(.{ .name = name, .target = target, .optimize = optimize });
-    exe.linkLibrary(app_lib.artifact);
+
+    const entrypoint = try getEntrypointFile(target);
+
+    const exe = b.addExecutable(.{ .name = name, .target = target, .optimize = optimize, .root_source_file = .{ .path = entrypoint } });
+    const sokol_module = b.addModule("sokol", .{ .source_file = .{ .path = "deps/sokol-zig/src/sokol/sokol.zig" } });
+    exe.addModule("sokol", sokol_module);
     exe.linkLibrary(sokol_lib.artifact);
     return exe;
 }
