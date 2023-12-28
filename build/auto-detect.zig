@@ -22,6 +22,7 @@ pub const AndroidSDKConfig = struct {
     java_home: []const u8 = "",
 
     keytool_path: []const u8 = "",
+    java_exe_path: []const u8 = "",
 
     android_ndk_include: []const u8 = "",
     android_ndk_include_android: []const u8 = "",
@@ -172,6 +173,7 @@ pub fn findAndroidSDKConfig(b: *Builder, target: *const std.zig.CrossTarget, ver
         else => @panic("unsupported arch for android build"),
     };
     const keytool_path = b.pathJoin(&.{ config.java_home, "bin", "keytool" ++ if (builtin.os.tag == .windows) ".exe" else "" });
+    const java_exe_path = b.pathJoin(&.{ config.java_home, "bin", "java" ++ if (builtin.os.tag == .windows) ".exe" else "" });
     const ndk_root = config.android_ndk_root;
     const ndk_include = b.pathJoin(&.{ ndk_root, "/sysroot/usr/include" });
     const ndk_include_android = b.pathJoin(&.{ ndk_include, "android" });
@@ -182,6 +184,7 @@ pub fn findAndroidSDKConfig(b: *Builder, target: *const std.zig.CrossTarget, ver
     const ndk_lib_host_arch_android = b.pathJoin(&.{ ndk_sysroot, "/usr/lib", target_dir_name, versions.api_version });
 
     config.keytool_path = keytool_path;
+    config.java_exe_path = java_exe_path;
     config.android_ndk_root = ndk_root;
     config.android_ndk_include = ndk_include;
     config.android_ndk_include_android = ndk_include_android;

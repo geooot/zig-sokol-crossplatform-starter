@@ -3,9 +3,12 @@ const Build = std.build;
 const sokol = @import("deps/sokol-zig/build.zig");
 const auto_detect = @import("build/auto-detect.zig");
 const ListFiles = @import("build/ListFiles.zig");
+const FetchFile = @import("build/FetchFile.zig");
 
 const APP_NAME = "MyApp";
 const BUNDLE_PREFIX = "com.example";
+
+const BUNDLETOOL_JAR_URL = "https://github.com/google/bundletool/releases/download/1.15.6/bundletool-all-1.15.6.jar";
 
 const ANDROID_TARGET_API_VERSION = "32";
 const ANDROID_MIN_API_VERSION = "32";
@@ -141,6 +144,11 @@ pub fn build(b: *Build.Builder) !void {
     // xcodebuild.step.dependOn(&generate_ios_sokol_framework.step);
 
     // android
+    const bundletool_install_folder = b.addWriteFiles();
+    const bundletool_install_loc = bundletool_install_folder.add("bundletool.jar", "");
+    const fetch_bundletool = FetchFile.create(b, BUNDLETOOL_JAR_URL, bundletool_install_loc);
+    fetch_bundletool.step.name = "Fetch bundletool";
+
     const install_keystore = generateAndroidKeyStore(b, android_sdk.keytool_path);
 
     var permissions = std.ArrayList([]const u8).init(b.allocator);
@@ -156,8 +164,8 @@ pub fn build(b: *Build.Builder) !void {
     const generate_compiled_resources = generateAndroidCompiledResources(b, generate_android_manifest, &android_sdk);
     const generate_android_pre_bundle = generateAndroidPreBundle(b, generate_android_manifest, generate_compiled_resources, &android_sdk, ANDROID_TARGET_API_VERSION);
     const generate_second_android_pre_bundle = generateAndroidAppSecondPreBundle(b, generate_android_pre_bundle, android_combo_lib);
-    const generate_android_bundle = generateAndroidAppBundle(b, generate_second_android_pre_bundle);
-    const generate_android_apks = generateAndroidApks(b, install_keystore, generate_android_bundle);
+    const generate_android_bundle = generateAndroidAppBundle(b, android_sdk.java_exe_path, fetch_bundletool, generate_second_android_pre_bundle);
+    const generate_android_apks = generateAndroidApks(b, android_sdk.java_exe_path, fetch_bundletool, install_keystore, generate_android_bundle);
 
     // native build exe
     const default_exe = try buildExe(b, default_target, optimize, default_sokol_lib);
@@ -539,28 +547,41 @@ fn generateAndroidAppSecondPreBundle(b: *Build.Builder, generate_pre_bundle_step
         .second_bundle_artifact = output_zip,
     };
 }
+
 const InstallAndroidAppBundle = struct {
     step: *Build.Step,
     aab_artifact: Build.LazyPath,
 };
-fn generateAndroidAppBundle(b: *Build.Builder, android_app_second_bundle: AndroidAppSecondBundle) InstallAndroidAppBundle {
-    // imagine not having a core part of your sdk's build system not included in your sdk installation
-    // oh wait you dont have to imagine! the geniuses at Google already did that!
-    const bundle_tool_exe_path = "bundletool";
-
-    const generate_app_bundle_cmd = b.addSystemCommand(&.{ bundle_tool_exe_path, "build-bundle", "--modules" });
+fn generateAndroidAppBundle(
+    b: *Build.Builder,
+    java_path: []const u8,
+    bundletool_install_step: *FetchFile,
+    android_app_second_bundle: AndroidAppSecondBundle,
+) InstallAndroidAppBundle {
+    const generate_app_bundle_cmd = b.addSystemCommand(&.{ java_path, "-jar" });
+    generate_app_bundle_cmd.addFileArg(bundletool_install_step.destination);
+    generate_app_bundle_cmd.addArgs(&.{ "build-bundle", "--modules" });
     generate_app_bundle_cmd.step.dependOn(android_app_second_bundle.step);
+    generate_app_bundle_cmd.step.dependOn(&bundletool_install_step.step);
     generate_app_bundle_cmd.addFileArg(android_app_second_bundle.second_bundle_artifact);
     generate_app_bundle_cmd.addArg("--output");
     const output_aab = generate_app_bundle_cmd.addOutputFileArg(APP_NAME ++ ".aab");
 
     return .{ .step = &generate_app_bundle_cmd.step, .aab_artifact = output_aab };
 }
-fn generateAndroidApks(b: *Build.Builder, install_keystore: InstallAndroidKeyStore, install_android_app_bundle: InstallAndroidAppBundle) *Build.Step.InstallFile {
-    const bundle_tool_exe_path = "bundletool";
 
-    const generate_app_bundle_cmd = b.addSystemCommand(&.{ bundle_tool_exe_path, "build-apks", "--overwrite", "--ks" });
+fn generateAndroidApks(
+    b: *Build.Builder,
+    java_path: []const u8,
+    bundletool_install_step: *FetchFile,
+    install_keystore: InstallAndroidKeyStore,
+    install_android_app_bundle: InstallAndroidAppBundle,
+) *Build.Step.InstallFile {
+    const generate_app_bundle_cmd = b.addSystemCommand(&.{ java_path, "-jar" });
+    generate_app_bundle_cmd.addFileArg(bundletool_install_step.destination);
+    generate_app_bundle_cmd.addArgs(&.{ "build-apks", "--overwrite", "--ks" });
     generate_app_bundle_cmd.step.dependOn(install_keystore.step);
+    generate_app_bundle_cmd.step.dependOn(&bundletool_install_step.step);
     generate_app_bundle_cmd.addFileArg(install_keystore.keystore_artifact);
     generate_app_bundle_cmd.addArgs(&.{
         "--ks-key-alias",
