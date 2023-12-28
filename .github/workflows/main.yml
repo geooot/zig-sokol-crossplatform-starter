@@ -1,0 +1,57 @@
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+    - main
+  pull_request:
+    branches:
+    - main
+
+jobs:
+  build-default:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+      - uses: goto-bus-stop/setup-zig@v2.1.1
+      - if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get install libxcursor-dev libxi-dev libasound2-dev mesa-utils libgl1-mesa-glx freeglut3-dev mesa-common-dev
+      - run: zig version
+      - run: zig build default --summary all --verbose
+  build-android:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+      - run: java -version 
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-32 ndk;26.1.10909125'
+      - uses: goto-bus-stop/setup-zig@v2.1.1
+      - run: zig version
+      - run: zig build android --summary all --verbose
+  build-ios:
+    strategy:
+      matrix:
+        os: [macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+      - uses: nightstory/setup-xcodegen@v1
+      - uses: goto-bus-stop/setup-zig@v2.1.1
+      - run: zig version
+      - run: zig build ios --summary all --verbose
