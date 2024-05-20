@@ -37,7 +37,7 @@ pub fn create(
 
 fn make(step: *Step, prog_node: *std.Progress.Node) !void {
     _ = prog_node;
-    const self = @fieldParentPtr(ListFiles, "step", step);
+    const self: *ListFiles = @fieldParentPtr("step", step);
 
     const dir_path = self.directory.getPath(step.owner);
 

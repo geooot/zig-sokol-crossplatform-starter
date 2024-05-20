@@ -1,3 +1,0 @@
-[submodule "deps/sokol-zig"]
-	path = deps/sokol-zig
-	url = https://github.com/floooh/sokol-zig.git

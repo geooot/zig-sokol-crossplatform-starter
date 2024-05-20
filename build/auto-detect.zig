@@ -4,7 +4,7 @@
 
 const std = @import("std");
 const builtin = @import("builtin");
-const Builder = std.build.Builder;
+const Builder = std.Build;
 
 const print = std.debug.print;
 
@@ -16,6 +16,8 @@ pub const ToolchainVersions = struct {
 
 pub const AndroidSDKConfig = struct {
     valid_config: bool = true,
+
+    toolchain_version: ToolchainVersions = .{},
 
     android_sdk_root: []const u8 = "",
     android_ndk_root: []const u8 = "",
@@ -34,7 +36,7 @@ pub const AndroidSDKConfig = struct {
 
 var config: AndroidSDKConfig = .{};
 
-pub fn findAndroidSDKConfig(b: *Builder, target: *const std.zig.CrossTarget, versions: ToolchainVersions) !AndroidSDKConfig {
+pub fn findAndroidSDKConfig(b: *Builder, target: *const std.Target, versions: ToolchainVersions) !AndroidSDKConfig {
     if (config.android_sdk_root.len == 0) {
         // try to find the android home
         const android_home_val = std.process.getEnvVarOwned(b.allocator, "ANDROID_HOME") catch "";
@@ -167,7 +169,7 @@ pub fn findAndroidSDKConfig(b: *Builder, target: *const std.zig.CrossTarget, ver
         }
     }
 
-    const target_dir_name = switch (target.cpu_arch.?) {
+    const target_dir_name = switch (target.cpu.arch) {
         .aarch64 => "aarch64-linux-android",
         .x86_64 => "x86_64-linux-android",
         else => @panic("unsupported arch for android build"),
@@ -192,6 +194,8 @@ pub fn findAndroidSDKConfig(b: *Builder, target: *const std.zig.CrossTarget, ver
     config.android_ndk_include_host_android = ndk_include_host_android;
     config.android_ndk_include_host_arch_android = ndk_include_host_arch_android;
     config.android_ndk_lib_host_arch_android = ndk_lib_host_arch_android;
+
+    config.toolchain_version = versions;
 
     return config;
 }
