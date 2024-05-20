@@ -1,9 +1,11 @@
 const std = @import("std");
-const Build = std.build;
-const sokol = @import("deps/sokol-zig/build.zig");
+const Build = std.Build;
+const sokol = @import("sokol");
 const auto_detect = @import("build/auto-detect.zig");
 const ListFiles = @import("build/ListFiles.zig");
 const FetchFile = @import("build/FetchFile.zig");
+const CreateAndroidAppBundle = @import("build/CreateAndroidAppBundle.zig");
+const InstallAndroidKeyStore = CreateAndroidAppBundle.InstallAndroidKeyStore;
 
 const APP_NAME = "MyApp";
 const BUNDLE_PREFIX = "com.example";
@@ -19,21 +21,21 @@ const ANDROID_KEYSTORE_ALIAS = "androidkey";
 const ANDROID_KEYSTORE_DNAME_STRING = "CN=Unknown, OU=Unknown, O=Unknown, L=Unknown, ST=Unknown, C=Unknown";
 const ANDROID_KEYSTORE_KEYPASS = "android";
 
-pub fn build(b: *Build.Builder) !void {
+pub fn build(b: *Build) !void {
     // targets
     const default_target = b.standardTargetOptions(.{});
-    const native_target = try std.zig.CrossTarget.parse(.{ .arch_os_abi = "native" });
-    const ios_target = try std.zig.CrossTarget.parse(.{ .arch_os_abi = "aarch64-ios" });
-    const ios_sim_target = try std.zig.CrossTarget.parse(.{
-        .arch_os_abi = if (native_target.getCpuArch().isAARCH64()) "aarch64-ios-simulator" else "x86_64-ios-simulator",
-    });
-    const android_arm64_target = try std.zig.CrossTarget.parse(.{
+    const native_target = b.resolveTargetQuery(try std.zig.CrossTarget.parse(.{ .arch_os_abi = "native" }));
+    const ios_target = b.resolveTargetQuery(try std.zig.CrossTarget.parse(.{ .arch_os_abi = "aarch64-ios" }));
+    const ios_sim_target = b.resolveTargetQuery(try std.zig.CrossTarget.parse(.{
+        .arch_os_abi = if (native_target.result.cpu.arch.isAARCH64()) "aarch64-ios-simulator" else "x86_64-ios-simulator",
+    }));
+    const android_arm64_target = b.resolveTargetQuery(try std.zig.CrossTarget.parse(.{
         .arch_os_abi = "aarch64-linux-android",
         .cpu_features = "baseline+v8a",
-    });
+    }));
     const optimize = b.standardOptimizeOption(.{});
 
-    const android_sdk = try auto_detect.findAndroidSDKConfig(b, &android_arm64_target, .{
+    const android_sdk = try auto_detect.findAndroidSDKConfig(b, &android_arm64_target.result, .{
         .api_version = ANDROID_TARGET_API_VERSION,
         .build_tools_version = ANDROID_BUILD_TOOLS_VERSION,
         .ndk_version = ANDROID_NDK_VERSION,
@@ -46,29 +48,20 @@ pub fn build(b: *Build.Builder) !void {
     });
 
     // libraries
-    const ios_build_lib = try buildAppLib(b, ios_target, optimize);
-    const ios_sokol_lib = try buildSokolLib(b, ios_target, optimize);
+    const ios_build_lib = try buildAppStaticLib(b, ios_target, optimize);
+    const ios_sim_build_lib = try buildAppStaticLib(b, ios_sim_target, optimize);
 
-    const ios_sim_build_lib = try buildAppLib(b, ios_sim_target, optimize);
-    const ios_sim_sokol_lib = try buildSokolLib(b, ios_sim_target, optimize);
-
-    const android_sokol_lib = try buildSokolLib(b, android_arm64_target, optimize);
-
-    const android_combo_lib = try buildAppSharedLibWithSokol(
+    const android_combo_lib = try buildAppSharedLib(
         b,
         android_arm64_target,
         optimize,
-        android_sokol_lib,
     );
 
     android_combo_lib.step.dependOn(&generate_libc_file.step);
     android_combo_lib.artifact.setLibCFile(generate_libc_file.files.getLast().getPath());
 
-    const default_sokol_lib = try buildSokolLib(b, default_target, optimize);
-
     // generate iOS framework files
     const ios_build_lib_name = "ios_lib" ++ APP_NAME ++ ".xcframework";
-    const ios_sokol_lib_name = "ios_libsokol.xcframework";
 
     const generate_ios_app_framework = b.addSystemCommand(&.{
         "xcodebuild",
@@ -82,19 +75,6 @@ pub fn build(b: *Build.Builder) !void {
     const ios_app_framework = generate_ios_app_framework.addOutputFileArg(ios_build_lib_name);
     generate_ios_app_framework.step.dependOn(&ios_build_lib.step);
     generate_ios_app_framework.step.dependOn(&ios_sim_build_lib.step);
-
-    const generate_ios_sokol_framework = b.addSystemCommand(&.{
-        "xcodebuild",
-        "-create-xcframework",
-        "-library",
-    });
-    generate_ios_sokol_framework.addFileArg(ios_sokol_lib.artifact.getEmittedBin());
-    generate_ios_sokol_framework.addArg("-library");
-    generate_ios_sokol_framework.addFileArg(ios_sim_sokol_lib.artifact.getEmittedBin());
-    generate_ios_sokol_framework.addArg("-output");
-    const ios_sokol_framework = generate_ios_sokol_framework.addOutputFileArg(ios_sokol_lib_name);
-    generate_ios_sokol_framework.step.dependOn(&ios_sokol_lib.step);
-    generate_ios_sokol_framework.step.dependOn(&ios_sim_sokol_lib.step);
 
     // create folder structure for xcode project
     const xcode_proj = b.addWriteFiles();
@@ -110,27 +90,23 @@ pub fn build(b: *Build.Builder) !void {
     copy_app_framework.addDirectoryArg(xcode_proj.getDirectory());
     copy_app_framework.step.dependOn(&xcode_proj.step);
 
-    const copy_sokol_framework = b.addSystemCommand(&.{ "cp", "-r" });
-    copy_sokol_framework.addDirectoryArg(ios_sokol_framework);
-    copy_sokol_framework.addDirectoryArg(xcode_proj.getDirectory());
-    copy_sokol_framework.step.dependOn(&xcode_proj.step);
-
     // generate xcode project
     const generate_xcode_proj = b.addSystemCommand(&.{ "xcodegen", "generate", "--spec" });
     generate_xcode_proj.addFileArg(project_yml_loc);
     generate_xcode_proj.setEnvironmentVariable("APP_LIB", ios_build_lib_name);
-    generate_xcode_proj.setEnvironmentVariable("SOKOL_LIB", ios_sokol_lib_name);
     generate_xcode_proj.setEnvironmentVariable("APP_NAME", APP_NAME);
     generate_xcode_proj.setEnvironmentVariable("BUNDLE_PREFIX", BUNDLE_PREFIX);
     generate_xcode_proj.setCwd(xcode_proj.getDirectory());
     generate_xcode_proj.expectExitCode(0);
     generate_xcode_proj.step.dependOn(&generate_ios_app_framework.step);
-    generate_xcode_proj.step.dependOn(&generate_ios_sokol_framework.step);
     generate_xcode_proj.step.dependOn(&copy_app_ios_sources.step);
     generate_xcode_proj.step.dependOn(&copy_app_framework.step);
-    generate_xcode_proj.step.dependOn(&copy_sokol_framework.step);
 
-    const output_xcode_project = b.addInstallDirectory(.{ .source_dir = xcode_proj.getDirectory(), .install_dir = .{ .custom = "" }, .install_subdir = "ios" });
+    const output_xcode_project = b.addInstallDirectory(.{
+        .source_dir = xcode_proj.getDirectory(),
+        .install_dir = .{ .custom = "" },
+        .install_subdir = "ios",
+    });
     output_xcode_project.step.dependOn(&generate_xcode_proj.step);
 
     // !! can't build since no team specified in xcode project !!
@@ -161,14 +137,19 @@ pub fn build(b: *Build.Builder) !void {
         .{ .package = BUNDLE_PREFIX ++ "." ++ APP_NAME, .lib_name = android_combo_lib.artifact.name, .permissions = permissions },
     );
     generate_android_manifest.step.dependOn(&android_combo_lib.step);
-    const generate_compiled_resources = generateAndroidCompiledResources(b, generate_android_manifest, &android_sdk);
-    const generate_android_pre_bundle = generateAndroidPreBundle(b, generate_android_manifest, generate_compiled_resources, &android_sdk, ANDROID_TARGET_API_VERSION);
-    const generate_second_android_pre_bundle = generateAndroidAppSecondPreBundle(b, generate_android_pre_bundle, android_combo_lib);
-    const generate_android_bundle = generateAndroidAppBundle(b, android_sdk.java_exe_path, fetch_bundletool, generate_second_android_pre_bundle);
-    const generate_android_apks = generateAndroidApks(b, android_sdk.java_exe_path, fetch_bundletool, install_keystore, generate_android_bundle);
+
+    const create_android_app_bundle = CreateAndroidAppBundle.create(
+        b,
+        APP_NAME,
+        install_keystore,
+        android_combo_lib,
+        generate_android_manifest,
+        android_sdk,
+        fetch_bundletool,
+    );
 
     // native build exe
-    const default_exe = try buildExe(b, default_target, optimize, default_sokol_lib);
+    const default_exe = try buildExe(b, default_target, optimize);
     const install_default_exe = b.addInstallArtifact(default_exe, .{});
 
     // entrypoint build steps
@@ -179,7 +160,7 @@ pub fn build(b: *Build.Builder) !void {
     install_default.dependOn(&install_default_exe.step);
 
     const install_android = b.step("android", "Build android project");
-    install_android.dependOn(&generate_android_apks.step);
+    install_android.dependOn(&create_android_app_bundle.step);
 
     const run_exe = b.addRunArtifact(default_exe);
     const run_step = b.step("run", "Run project");
@@ -193,104 +174,135 @@ pub fn build(b: *Build.Builder) !void {
     b.default_step = all_step;
 }
 
-fn getEntrypointFile(target: std.zig.CrossTarget) ![]const u8 {
-    const native_target_info = try std.zig.system.NativeTargetInfo.detect(target);
+fn getEntrypointFile(target: Build.ResolvedTarget) ![]const u8 {
     var entrypoint: []const u8 = "main.zig";
 
-    if (native_target_info.target.isAndroid()) {
+    if (target.result.isAndroid()) {
         entrypoint = "main.android.zig";
     }
     return entrypoint;
 }
 
 fn buildExe(
-    b: *Build.Builder,
-    target: std.zig.CrossTarget,
+    b: *Build,
+    target: Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
-    sokol_lib: *Build.Step.InstallArtifact,
-) !*Build.CompileStep {
-    const triple = try target.zigTriple(b.allocator);
+) !*Build.Step.Compile {
+    const triple = try target.result.zigTriple(b.allocator);
     const name = b.fmt(APP_NAME ++ "_{s}", .{triple});
 
     const entrypoint = try getEntrypointFile(target);
 
-    const exe = b.addExecutable(.{ .name = name, .target = target, .optimize = optimize, .root_source_file = .{ .path = entrypoint } });
-    const sokol_module = b.addModule("sokol", .{ .source_file = .{ .path = "deps/sokol-zig/src/sokol/sokol.zig" } });
-    exe.addModule("sokol", sokol_module);
-    exe.linkLibrary(sokol_lib.artifact);
+    const exe = b.addExecutable(.{
+        .name = name,
+        .target = target,
+        .optimize = optimize,
+        .root_source_file = .{ .path = entrypoint },
+    });
+
+    const dep_sokol = b.dependency("sokol", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const sokol_module = dep_sokol.module("sokol");
+    const items = sokol_module.link_objects.items;
+    for (items) |sokol_lib| {
+        switch (sokol_lib) {
+            .other_step => |sokol_compile_lib| try addCompilePaths(b, target, sokol_compile_lib),
+            else => {},
+        }
+    }
+    exe.root_module.addImport("sokol", dep_sokol.module("sokol"));
+    try addCompilePaths(b, target, exe);
+
     return exe;
 }
 
-fn buildAppLib(
-    b: *Build.Builder,
-    target: std.zig.CrossTarget,
+fn buildAppStaticLib(
+    b: *Build,
+    target: Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
 ) !*Build.Step.InstallArtifact {
-    const triple = try target.zigTriple(b.allocator);
+    const triple = try target.result.zigTriple(b.allocator);
     const name = b.fmt(APP_NAME ++ "_{s}", .{triple});
 
     const entrypoint = try getEntrypointFile(target);
 
-    const lib = b.addStaticLibrary(.{ .name = name, .target = target, .optimize = optimize, .root_source_file = .{ .path = entrypoint } });
-    const sokol_module = b.addModule("sokol", .{ .source_file = .{ .path = "deps/sokol-zig/src/sokol/sokol.zig" } });
-    lib.addModule("sokol", sokol_module);
+    const lib = b.addStaticLibrary(.{
+        .name = name,
+        .target = target,
+        .optimize = optimize,
+        .root_source_file = .{
+            .path = entrypoint,
+        },
+    });
+
+    const dep_sokol = b.dependency("sokol", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const sokol_module = dep_sokol.module("sokol");
+    const items = sokol_module.link_objects.items;
+    for (items) |sokol_lib| {
+        switch (sokol_lib) {
+            .other_step => |sokol_compile_lib| try addCompilePaths(b, target, sokol_compile_lib),
+            else => {},
+        }
+    }
+    lib.root_module.addImport("sokol", sokol_module);
+    try addCompilePaths(b, target, lib);
+
     const install_lib = b.addInstallArtifact(lib, .{});
 
     return install_lib;
 }
 
-fn buildSokolLib(
-    b: *Build.Builder,
-    target: std.zig.CrossTarget,
+fn buildAppSharedLib(
+    b: *Build,
+    target: Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
 ) !*Build.Step.InstallArtifact {
-    const triple = try target.zigTriple(b.allocator);
-    const name = b.fmt("libsokol" ++ "_{s}.a", .{triple});
-
-    const lib = sokol.buildSokol(b, target, optimize, .{}, "deps/sokol-zig/");
-    try addCompilePaths(b, target, lib);
-    const install_lib = b.addInstallArtifact(lib, .{ .dest_sub_path = name });
-
-    return install_lib;
-}
-
-fn buildAppSharedLibWithSokol(
-    b: *Build.Builder,
-    target: std.zig.CrossTarget,
-    optimize: std.builtin.OptimizeMode,
-    sokol_lib: *Build.Step.InstallArtifact,
-) !*Build.Step.InstallArtifact {
-    const triple = try target.zigTriple(b.allocator);
+    const triple = try target.result.zigTriple(b.allocator);
     const name = b.fmt(APP_NAME ++ "_{s}", .{triple});
 
     const entrypoint = try getEntrypointFile(target);
 
     const lib = b.addSharedLibrary(.{ .name = name, .target = target, .optimize = optimize, .root_source_file = .{ .path = entrypoint } });
-    const sokol_module = b.addModule("sokol", .{ .source_file = .{ .path = "deps/sokol-zig/src/sokol/sokol.zig" } });
-    lib.addModule("sokol", sokol_module);
-    lib.linkLibrary(sokol_lib.artifact);
+    const dep_sokol = b.dependency("sokol", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const sokol_module = dep_sokol.module("sokol");
+    const items = sokol_module.link_objects.items;
+    for (items) |sokol_lib| {
+        switch (sokol_lib) {
+            .other_step => |sokol_compile_lib| try addCompilePaths(b, target, sokol_compile_lib),
+            else => {},
+        }
+    }
+    lib.root_module.addImport("sokol", sokol_module);
     try addCompilePaths(b, target, lib);
 
     const install_lib = b.addInstallArtifact(lib, .{});
     return install_lib;
 }
 
-fn addCompilePaths(b: *Build.Builder, target: std.zig.CrossTarget, step: *Build.CompileStep) !void {
-    const native_target_info = try std.zig.system.NativeTargetInfo.detect(target);
-    if (native_target_info.target.os.tag == .ios) {
-        const sysroot = std.zig.system.darwin.getSdk(b.allocator, native_target_info.target) orelse b.sysroot;
+fn addCompilePaths(b: *Build, target: Build.ResolvedTarget, step: anytype) !void {
+    if (target.result.os.tag == .ios) {
+        const sysroot = std.zig.system.darwin.getSdk(b.allocator, target.result) orelse b.sysroot;
         step.addLibraryPath(.{ .path = b.pathJoin(&.{ sysroot orelse "", "/usr/lib" }) }); //(.{ .cwd_relative = "/usr/lib" });
         step.addIncludePath(.{ .path = b.pathJoin(&.{ sysroot orelse "", "/usr/include" }) }); //(.{ .cwd_relative = "/usr/include" });
         step.addFrameworkPath(.{ .path = b.pathJoin(&.{ sysroot orelse "", "/System/Library/Frameworks" }) }); //(.{ .cwd_relative = "/System/Library/Frameworks" });
-    } else if (native_target_info.target.isAndroid()) {
-        const target_dir_name = switch (native_target_info.target.cpu.arch) {
+    } else if (target.result.isAndroid()) {
+        const target_dir_name = switch (target.result.cpu.arch) {
             .aarch64 => "aarch64-linux-android",
             .x86_64 => "x86_64-linux-android",
             else => @panic("unsupported arch for android build"),
         };
         _ = target_dir_name;
 
-        const android_sdk = try auto_detect.findAndroidSDKConfig(b, &target, .{
+        const android_sdk = try auto_detect.findAndroidSDKConfig(b, &target.result, .{
             .api_version = ANDROID_TARGET_API_VERSION,
             .build_tools_version = ANDROID_BUILD_TOOLS_VERSION,
             .ndk_version = ANDROID_NDK_VERSION,
@@ -302,10 +314,7 @@ fn addCompilePaths(b: *Build.Builder, target: std.zig.CrossTarget, step: *Build.
         step.addIncludePath(.{ .path = android_sdk.android_ndk_include_host_android });
         step.addIncludePath(.{ .path = android_sdk.android_ndk_include_host_arch_android });
 
-        step.defineCMacro("ANDROID", null);
-        step.defineCMacro("__ANDROID__", null);
-
-        step.linkLibC();
+        //step.linkLibC();
 
         step.addLibraryPath(.{ .path = android_sdk.android_ndk_lib_host_arch_android });
     }
@@ -317,7 +326,7 @@ const LibCFileConfig = struct {
     sys_include_dir: []const u8 = "",
     crt_dir: []const u8 = "",
 };
-fn createLibCFile(b: *Build.Builder, config: LibCFileConfig) !*Build.Step.WriteFile {
+fn createLibCFile(b: *Build, config: LibCFileConfig) !*Build.Step.WriteFile {
     const create_lib_c_file = b.addWriteFile("android.conf", blk: {
         var buf = std.ArrayList(u8).init(b.allocator);
 
@@ -338,11 +347,8 @@ fn createLibCFile(b: *Build.Builder, config: LibCFileConfig) !*Build.Step.WriteF
     create_lib_c_file.step.name = "Write Android LibC conf (android.conf)";
     return create_lib_c_file;
 }
-const InstallAndroidKeyStore = struct {
-    step: *Build.Step,
-    keystore_artifact: Build.LazyPath,
-};
-fn generateAndroidKeyStore(b: *Build.Builder, keytool_exe: []const u8) InstallAndroidKeyStore {
+
+fn generateAndroidKeyStore(b: *Build, keytool_exe: []const u8) InstallAndroidKeyStore {
     const generate_key_store = b.addSystemCommand(&.{ keytool_exe, "-genkey", "-noprompt", "-keystore" });
     generate_key_store.setName("Generate keystore");
     const keystore_artifact = generate_key_store.addOutputFileArg(APP_NAME ++ ".keystore");
@@ -363,6 +369,9 @@ fn generateAndroidKeyStore(b: *Build.Builder, keytool_exe: []const u8) InstallAn
     return .{
         .step = &generate_key_store.step,
         .keystore_artifact = keystore_artifact,
+        .alias = ANDROID_KEYSTORE_ALIAS,
+        .keypass = ANDROID_KEYSTORE_KEYPASS,
+        .dname = ANDROID_KEYSTORE_DNAME_STRING,
     };
 }
 const AndroidManifestConfig = struct {
@@ -373,7 +382,7 @@ const AndroidManifestConfig = struct {
     has_code: bool = false,
 };
 fn generateAndroidManifest(
-    b: *Build.Builder,
+    b: *Build,
     config: AndroidManifestConfig,
 ) !*Build.Step.WriteFile {
     const manifest_step = b.addWriteFile("AndroidManifest.xml", blk: {
@@ -421,28 +430,29 @@ fn generateAndroidManifest(
     return manifest_step;
 }
 
+const RunStepAndOutputDir = struct {
+    run_step: *Build.Step.Run,
+    output_directory: Build.LazyPath,
+};
 fn generateAndroidCompiledResources(
-    b: *Build.Builder,
+    b: *Build,
     generate_android_manifest: *Build.Step.WriteFile,
     android_sdk: *const auto_detect.AndroidSDKConfig,
-) *Build.Step.Run {
+) RunStepAndOutputDir {
     const aapt2_exe_path = b.pathJoin(&.{ android_sdk.android_sdk_root, "build-tools", ANDROID_BUILD_TOOLS_VERSION, "aapt2" });
-
-    const compiled_resources_path = b.pathJoin(&.{ b.install_prefix, "compiled_resources" });
 
     const generate_resources_cmd = b.addSystemCommand(&.{ aapt2_exe_path, "compile", "--dir" });
     generate_resources_cmd.addDirectoryArg(.{ .path = b.pathJoin(&.{ "android", "res" }) });
     generate_resources_cmd.addArg("-o");
-    generate_resources_cmd.addDirectoryArg(.{ .path = compiled_resources_path });
+    const compiled_resources_dir = generate_resources_cmd.addOutputFileArg("compiled_resources/");
 
     generate_resources_cmd.step.dependOn(&generate_android_manifest.step);
     generate_resources_cmd.setName("aapt2 compile");
 
-    const unzip_resources_cmd = b.addSystemCommand(&.{ "unzip", "-o", compiled_resources_path, "-d" });
-    unzip_resources_cmd.addFileArg(.{ .path = b.fmt("{s}_unzipped", .{compiled_resources_path}) });
-    unzip_resources_cmd.step.dependOn(&generate_resources_cmd.step);
-
-    return unzip_resources_cmd;
+    return .{
+        .run_step = generate_resources_cmd,
+        .output_directory = compiled_resources_dir,
+    };
 }
 
 fn addFilesToExec(file: Build.LazyPath, state: *anyopaque) void {
@@ -451,21 +461,29 @@ fn addFilesToExec(file: Build.LazyPath, state: *anyopaque) void {
 }
 
 fn generateAndroidPreBundle(
-    b: *Build.Builder,
+    b: *Build,
     manifest_file_step: *Build.Step.WriteFile,
-    generate_compiled_resources_step: *Build.Step.Run,
+    create_compiled_resources: RunStepAndOutputDir,
     android_sdk: *const auto_detect.AndroidSDKConfig,
     android_version: []const u8,
-) *Build.Step.Run {
+) RunStepAndOutputDir {
     const aapt2_exe_path = b.pathJoin(&.{
         android_sdk.android_sdk_root,
         "build-tools",
         ANDROID_BUILD_TOOLS_VERSION,
         "aapt2",
     });
+    const compiled_resources_path = create_compiled_resources.output_directory;
 
-    const generate_pre_bundle_cmd = b.addSystemCommand(&.{ aapt2_exe_path, "link", "--auto-add-overlay", "--proto-format", "-o" });
-    generate_pre_bundle_cmd.addFileArg(.{ .path = b.pathJoin(&.{ b.install_prefix, "output.apk" }) });
+    const generate_pre_bundle_cmd = b.addSystemCommand(&.{
+        aapt2_exe_path,
+        "link",
+        "--auto-add-overlay",
+        "--proto-format",
+        "--output-to-dir",
+        "-o",
+    });
+    const output_apk_path = generate_pre_bundle_cmd.addOutputFileArg("output/");
     generate_pre_bundle_cmd.addArg("-I");
     generate_pre_bundle_cmd.addFileArg(.{
         .path = b.pathJoin(&.{
@@ -479,37 +497,31 @@ fn generateAndroidPreBundle(
     generate_pre_bundle_cmd.addFileArg(manifest_file_step.files.getLast().getPath());
     generate_pre_bundle_cmd.addArg("-R");
 
-    const compiled_resources_path = b.pathJoin(&.{ b.install_prefix, "compiled_resources_unzipped" });
     const get_flat_files_step = ListFiles.create(
         b,
-        .{ .path = compiled_resources_path },
+        compiled_resources_path,
         addFilesToExec,
         @ptrCast(generate_pre_bundle_cmd),
     );
-    get_flat_files_step.step.dependOn(&generate_compiled_resources_step.step);
+    get_flat_files_step.step.dependOn(&create_compiled_resources.run_step.step);
     generate_pre_bundle_cmd.step.dependOn(&get_flat_files_step.step);
     generate_pre_bundle_cmd.setName("aapt2 link");
 
-    // this looks stupid (and it is) but its actually a legit step in building the android app (*facepalm*)
-    // also its going to get more stupid so get ready for that.
-    // https://developer.android.com/build/building-cmdline
-    const unzip_cmd = b.addSystemCommand(&.{
-        "unzip", "-o", b.pathJoin(&.{ b.install_prefix, "output.apk" }), "-d", b.pathJoin(&.{ b.install_prefix, "output_unzipped" }),
-    });
-    unzip_cmd.step.dependOn(&generate_pre_bundle_cmd.step);
-
-    return unzip_cmd;
+    return .{
+        .run_step = generate_pre_bundle_cmd,
+        .output_directory = output_apk_path,
+    };
 }
 
-const AndroidAppSecondBundle = struct {
-    step: *Build.Step,
-    second_bundle_artifact: Build.LazyPath,
-};
-fn generateAndroidAppSecondPreBundle(b: *Build.Builder, generate_pre_bundle_step: *Build.Step.Run, combo_lib: *Build.Step.InstallArtifact) AndroidAppSecondBundle {
+fn generateAndroidAppSecondPreBundle(
+    b: *Build,
+    generate_pre_bundle_step: RunStepAndOutputDir,
+    combo_lib: *Build.Step.InstallArtifact,
+) RunStepAndOutputDir {
     const wf = b.addWriteFiles();
-    wf.step.dependOn(&generate_pre_bundle_step.step);
+    wf.step.dependOn(&generate_pre_bundle_step.run_step.step);
 
-    const prebundle_path = b.pathJoin(&.{ b.install_prefix, "output_unzipped" });
+    const prebundle_path = generate_pre_bundle_step.output_directory;
 
     _ = wf.addCopyFile(.{ .path = b.pathJoin(&.{ prebundle_path, "AndroidManifest.xml" }) }, "manifest/AndroidManifest.xml");
 
@@ -543,39 +555,38 @@ fn generateAndroidAppSecondPreBundle(b: *Build.Builder, generate_pre_bundle_step
     zip_files.setCwd(wf.getDirectory());
 
     return .{
-        .step = &zip_files.step,
-        .second_bundle_artifact = output_zip,
+        .run_step = zip_files,
+        .output_directory = output_zip,
     };
 }
 
-const InstallAndroidAppBundle = struct {
-    step: *Build.Step,
-    aab_artifact: Build.LazyPath,
-};
 fn generateAndroidAppBundle(
-    b: *Build.Builder,
+    b: *Build,
     java_path: []const u8,
     bundletool_install_step: *FetchFile,
-    android_app_second_bundle: AndroidAppSecondBundle,
-) InstallAndroidAppBundle {
+    android_app_second_bundle: RunStepAndOutputDir,
+) RunStepAndOutputDir {
     const generate_app_bundle_cmd = b.addSystemCommand(&.{ java_path, "-jar" });
     generate_app_bundle_cmd.addFileArg(bundletool_install_step.destination);
     generate_app_bundle_cmd.addArgs(&.{ "build-bundle", "--modules" });
-    generate_app_bundle_cmd.step.dependOn(android_app_second_bundle.step);
+    generate_app_bundle_cmd.step.dependOn(&android_app_second_bundle.run_step.step);
     generate_app_bundle_cmd.step.dependOn(&bundletool_install_step.step);
-    generate_app_bundle_cmd.addFileArg(android_app_second_bundle.second_bundle_artifact);
+    generate_app_bundle_cmd.addFileArg(android_app_second_bundle.output_directory);
     generate_app_bundle_cmd.addArg("--output");
     const output_aab = generate_app_bundle_cmd.addOutputFileArg(APP_NAME ++ ".aab");
 
-    return .{ .step = &generate_app_bundle_cmd.step, .aab_artifact = output_aab };
+    return .{
+        .run_step = generate_app_bundle_cmd,
+        .output_directory = output_aab,
+    };
 }
 
 fn generateAndroidApks(
-    b: *Build.Builder,
+    b: *Build,
     java_path: []const u8,
     bundletool_install_step: *FetchFile,
     install_keystore: InstallAndroidKeyStore,
-    install_android_app_bundle: InstallAndroidAppBundle,
+    install_android_app_bundle: RunStepAndOutputDir,
 ) *Build.Step.InstallFile {
     const generate_app_bundle_cmd = b.addSystemCommand(&.{ java_path, "-jar" });
     generate_app_bundle_cmd.addFileArg(bundletool_install_step.destination);
@@ -592,8 +603,8 @@ fn generateAndroidApks(
         "pass:" ++ ANDROID_KEYSTORE_KEYPASS,
         "--bundle",
     });
-    generate_app_bundle_cmd.step.dependOn(install_android_app_bundle.step);
-    generate_app_bundle_cmd.addFileArg(install_android_app_bundle.aab_artifact);
+    generate_app_bundle_cmd.step.dependOn(&install_android_app_bundle.run_step.step);
+    generate_app_bundle_cmd.addFileArg(install_android_app_bundle.output_directory);
     generate_app_bundle_cmd.addArg("--output");
     const output_apks = generate_app_bundle_cmd.addOutputFileArg(APP_NAME ++ ".apks");
     const install_apks = b.addInstallFile(output_apks, APP_NAME ++ ".apks");

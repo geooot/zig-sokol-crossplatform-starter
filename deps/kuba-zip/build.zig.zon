@@ -1,0 +1,13 @@
+.{
+    .name = "kuba-zip",
+    .version = "1.0.0",
+    .paths = .{
+        "src/"
+    },
+    .dependencies = .{
+        .kubazipc = .{ 
+            .url = "https://github.com/kuba--/zip/archive/refs/tags/v0.3.1.tar.gz",
+            .hash = "1220afc654db93359c0938de79942935913bfade5d64dc05c5bb5591a1fb530ab33f",
+        },
+    },
+}

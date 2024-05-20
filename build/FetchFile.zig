@@ -30,14 +30,14 @@ pub fn create(
 
 fn make(step: *Step, prog_node: *std.Progress.Node) !void {
     _ = prog_node;
-    const self = @fieldParentPtr(FetchFile, "step", step);
+    const self: *FetchFile = @fieldParentPtr("step", step);
     const allocator = step.owner.allocator;
 
     const target_file_path = self.destination.getPath(step.owner);
 
     const target_file = try std.fs.openFileAbsolute(target_file_path, .{ .mode = .read_write });
 
-    var man = step.owner.cache.obtain();
+    var man = step.owner.graph.cache.obtain();
     defer man.deinit();
 
     man.hash.addBytes(self.url);
@@ -51,10 +51,15 @@ fn make(step: *Step, prog_node: *std.Progress.Node) !void {
 
     var client: std.http.Client = .{ .allocator = allocator };
     defer client.deinit();
-    var fetch_res = try client.fetch(allocator, .{
+    var body = std.ArrayList(u8).init(allocator);
+    defer body.deinit();
+
+    _ = try client.fetch(.{
         .location = .{ .url = self.url },
-        .response_strategy = .{ .file = target_file },
+        .response_storage = .{ .dynamic = &body },
     });
-    fetch_res.deinit();
+
+    try target_file.writeAll(body.items);
+
     try step.writeManifest(&man);
 }
