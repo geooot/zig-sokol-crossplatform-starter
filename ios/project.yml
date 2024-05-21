@@ -26,6 +26,9 @@ targets:
       - framework: ${APP_LIB}
         embed: false
         link: true
+      - framework: ${SOKOL_LIB}
+        embed: false
+        link: true
       - sdk: Metal.framework
       - sdk: MetalKit.framework
       - sdk: UIKit.framework

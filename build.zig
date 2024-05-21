@@ -48,13 +48,22 @@ pub fn build(b: *Build) !void {
     });
 
     // libraries
-    const ios_build_lib = try buildAppStaticLib(b, ios_target, optimize);
-    const ios_sim_build_lib = try buildAppStaticLib(b, ios_sim_target, optimize);
+    const ios_sokol_res = try buildSokolLib(b, ios_target, optimize);
+    const ios_sim_sokol_res = try buildSokolLib(b, ios_sim_target, optimize);
+    const ios_sokol_module = ios_sokol_res.module;
+    const ios_sim_sokol_module = ios_sokol_res.module;
+    const ios_sokol_lib = ios_sokol_res.installed_library;
+    const ios_sim_sokol_lib = ios_sim_sokol_res.installed_library;
 
+    const ios_build_lib = try buildAppStaticLib(b, ios_target, optimize, ios_sokol_module);
+    const ios_sim_build_lib = try buildAppStaticLib(b, ios_sim_target, optimize, ios_sim_sokol_module);
+
+    const android_sokol_res = try buildSokolLib(b, android_arm64_target, optimize);
     const android_combo_lib = try buildAppSharedLib(
         b,
         android_arm64_target,
         optimize,
+        android_sokol_res.module,
     );
 
     android_combo_lib.step.dependOn(&generate_libc_file.step);
@@ -76,6 +85,21 @@ pub fn build(b: *Build) !void {
     generate_ios_app_framework.step.dependOn(&ios_build_lib.step);
     generate_ios_app_framework.step.dependOn(&ios_sim_build_lib.step);
 
+    const ios_build_sokol_lib_name = "ios_libSokol.xcframework";
+
+    const generate_ios_sokol_framework = b.addSystemCommand(&.{
+        "xcodebuild",
+        "-create-xcframework",
+        "-library",
+    });
+    generate_ios_sokol_framework.addFileArg(ios_sokol_lib.artifact.getEmittedBin());
+    generate_ios_sokol_framework.addArg("-library");
+    generate_ios_sokol_framework.addFileArg(ios_sim_sokol_lib.artifact.getEmittedBin());
+    generate_ios_sokol_framework.addArg("-output");
+    const ios_sokol_framework = generate_ios_sokol_framework.addOutputFileArg(ios_build_sokol_lib_name);
+    generate_ios_sokol_framework.step.dependOn(&ios_sokol_lib.step);
+    generate_ios_sokol_framework.step.dependOn(&ios_sim_sokol_lib.step);
+
     // create folder structure for xcode project
     const xcode_proj = b.addWriteFiles();
     const project_yml_loc = xcode_proj.addCopyFile(.{ .path = b.pathJoin(&.{ "ios", "project.yml" }) }, "project.yml");
@@ -90,17 +114,23 @@ pub fn build(b: *Build) !void {
     copy_app_framework.addDirectoryArg(xcode_proj.getDirectory());
     copy_app_framework.step.dependOn(&xcode_proj.step);
 
+    const copy_sokol_framework = b.addSystemCommand(&.{ "cp", "-r" });
+    copy_sokol_framework.addDirectoryArg(ios_sokol_framework);
+    copy_sokol_framework.addDirectoryArg(xcode_proj.getDirectory());
+    copy_sokol_framework.step.dependOn(&xcode_proj.step);
+
     // generate xcode project
     const generate_xcode_proj = b.addSystemCommand(&.{ "xcodegen", "generate", "--spec" });
     generate_xcode_proj.addFileArg(project_yml_loc);
     generate_xcode_proj.setEnvironmentVariable("APP_LIB", ios_build_lib_name);
     generate_xcode_proj.setEnvironmentVariable("APP_NAME", APP_NAME);
+    generate_xcode_proj.setEnvironmentVariable("SOKOL_LIB", ios_build_sokol_lib_name);
     generate_xcode_proj.setEnvironmentVariable("BUNDLE_PREFIX", BUNDLE_PREFIX);
     generate_xcode_proj.setCwd(xcode_proj.getDirectory());
     generate_xcode_proj.expectExitCode(0);
-    generate_xcode_proj.step.dependOn(&generate_ios_app_framework.step);
     generate_xcode_proj.step.dependOn(&copy_app_ios_sources.step);
     generate_xcode_proj.step.dependOn(&copy_app_framework.step);
+    generate_xcode_proj.step.dependOn(&copy_sokol_framework.step);
 
     const output_xcode_project = b.addInstallDirectory(.{
         .source_dir = xcode_proj.getDirectory(),
@@ -149,7 +179,8 @@ pub fn build(b: *Build) !void {
     );
 
     // native build exe
-    const default_exe = try buildExe(b, default_target, optimize);
+    const default_sokol_res = try buildSokolLib(b, default_target, optimize);
+    const default_exe = try buildExe(b, default_target, optimize, default_sokol_res.module);
     const install_default_exe = b.addInstallArtifact(default_exe, .{});
 
     // entrypoint build steps
@@ -183,10 +214,43 @@ fn getEntrypointFile(target: Build.ResolvedTarget) ![]const u8 {
     return entrypoint;
 }
 
+const BuildSokolError = error{FoundMoreThanOneLib};
+
+const BuildSokolResult = struct {
+    module: *Build.Module,
+    installed_library: *Build.Step.InstallArtifact,
+};
+fn buildSokolLib(
+    b: *Build,
+    target: Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+) !BuildSokolResult {
+    const triple = try target.result.zigTriple(b.allocator);
+    const name = b.fmt("libsokol_{s}", .{triple});
+
+    const dep_sokol = b.dependency("sokol", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const sokol_module = dep_sokol.module("sokol");
+    if (sokol_module.link_objects.items.len > 1) {
+        return BuildSokolError.FoundMoreThanOneLib;
+    }
+    const sokol_lib = sokol_module.link_objects.getLast().other_step;
+    try addCompilePaths(b, target, sokol_lib);
+    const installed_lib = b.addInstallArtifact(sokol_lib, .{ .dest_sub_path = name });
+
+    return .{
+        .module = sokol_module,
+        .installed_library = installed_lib,
+    };
+}
+
 fn buildExe(
     b: *Build,
     target: Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
+    sokol_module: *Build.Module,
 ) !*Build.Step.Compile {
     const triple = try target.result.zigTriple(b.allocator);
     const name = b.fmt(APP_NAME ++ "_{s}", .{triple});
@@ -200,20 +264,7 @@ fn buildExe(
         .root_source_file = .{ .path = entrypoint },
     });
 
-    const dep_sokol = b.dependency("sokol", .{
-        .target = target,
-        .optimize = optimize,
-    });
-    const sokol_module = dep_sokol.module("sokol");
-    const items = sokol_module.link_objects.items;
-    for (items) |sokol_lib| {
-        switch (sokol_lib) {
-            .other_step => |sokol_compile_lib| try addCompilePaths(b, target, sokol_compile_lib),
-            else => {},
-        }
-    }
-    exe.root_module.addImport("sokol", dep_sokol.module("sokol"));
-    try addCompilePaths(b, target, exe);
+    exe.root_module.addImport("sokol", sokol_module);
 
     return exe;
 }
@@ -222,6 +273,7 @@ fn buildAppStaticLib(
     b: *Build,
     target: Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
+    sokol_module: *Build.Module,
 ) !*Build.Step.InstallArtifact {
     const triple = try target.result.zigTriple(b.allocator);
     const name = b.fmt(APP_NAME ++ "_{s}", .{triple});
@@ -237,18 +289,6 @@ fn buildAppStaticLib(
         },
     });
 
-    const dep_sokol = b.dependency("sokol", .{
-        .target = target,
-        .optimize = optimize,
-    });
-    const sokol_module = dep_sokol.module("sokol");
-    const items = sokol_module.link_objects.items;
-    for (items) |sokol_lib| {
-        switch (sokol_lib) {
-            .other_step => |sokol_compile_lib| try addCompilePaths(b, target, sokol_compile_lib),
-            else => {},
-        }
-    }
     lib.root_module.addImport("sokol", sokol_module);
     try addCompilePaths(b, target, lib);
 
@@ -261,26 +301,22 @@ fn buildAppSharedLib(
     b: *Build,
     target: Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
+    sokol_module: *Build.Module,
 ) !*Build.Step.InstallArtifact {
     const triple = try target.result.zigTriple(b.allocator);
     const name = b.fmt(APP_NAME ++ "_{s}", .{triple});
 
     const entrypoint = try getEntrypointFile(target);
 
-    const lib = b.addSharedLibrary(.{ .name = name, .target = target, .optimize = optimize, .root_source_file = .{ .path = entrypoint } });
-    const dep_sokol = b.dependency("sokol", .{
+    const lib = b.addSharedLibrary(.{
+        .name = name,
         .target = target,
         .optimize = optimize,
+        .root_source_file = .{
+            .path = entrypoint,
+        },
     });
 
-    const sokol_module = dep_sokol.module("sokol");
-    const items = sokol_module.link_objects.items;
-    for (items) |sokol_lib| {
-        switch (sokol_lib) {
-            .other_step => |sokol_compile_lib| try addCompilePaths(b, target, sokol_compile_lib),
-            else => {},
-        }
-    }
     lib.root_module.addImport("sokol", sokol_module);
     try addCompilePaths(b, target, lib);
 
