@@ -25,22 +25,23 @@ step: Step,
 combo_lib: *std.Build.Step.InstallArtifact,
 manifest_wf: *std.Build.Step.WriteFile,
 
-compiled_resources_dir: ?std.Build.LazyPath,
-generate_pre_bundle_cmd: ?*std.Build.Step.Run,
-link_output_dir: ?std.Build.LazyPath,
-second_pre_bundle_input_folder: ?*std.Build.Step.WriteFile,
+compiled_resources_folder: std.Build.LazyPath,
+generate_pre_bundle_cmd: *std.Build.Step.Run,
+link_output_folder: std.Build.LazyPath,
+second_pre_bundle_input_wf: *std.Build.Step.WriteFile,
 
 output_aab: std.Build.LazyPath,
 output_apks: std.Build.LazyPath,
 
 pub fn create(
     b: *std.Build,
-    app_name: anytype,
+    app_name: []const u8,
     key_store: InstallAndroidKeyStore,
     combo_lib: *std.Build.Step.InstallArtifact,
     manifest: *std.Build.Step.WriteFile,
     android_sdk: auto_detect.AndroidSDKConfig,
     bundletool: *FetchFile,
+    zipcreate: *std.Build.Step.Compile,
 ) *CreateAndroidAppBundle {
     const self = b.allocator.create(CreateAndroidAppBundle) catch @panic("OOM");
     self.combo_lib = combo_lib;
@@ -56,7 +57,10 @@ pub fn create(
     const generate_resources_cmd = b.addSystemCommand(&.{ aapt2_exe_path, "compile", "--dir" });
     generate_resources_cmd.addDirectoryArg(.{ .path = b.pathJoin(&.{ "android", "res" }) });
     generate_resources_cmd.addArg("-o");
-    self.compiled_resources_dir = generate_resources_cmd.addOutputFileArg("compiled_resources/");
+    const compiled_resources_wf = b.addWriteFiles();
+    self.compiled_resources_folder = compiled_resources_wf.getDirectory();
+    generate_resources_cmd.addDirectoryArg(self.compiled_resources_folder);
+    generate_resources_cmd.step.dependOn(&compiled_resources_wf.step);
     generate_resources_cmd.step.dependOn(&manifest.step);
     generate_resources_cmd.setName("aapt2 compile");
 
@@ -83,9 +87,11 @@ pub fn create(
         "--output-to-dir",
         "-o",
     });
-    self.link_output_dir = self.generate_pre_bundle_cmd.?.addOutputFileArg("output/");
-    self.generate_pre_bundle_cmd.?.addArg("-I");
-    self.generate_pre_bundle_cmd.?.addFileArg(.{
+    const link_output_dir_wf = b.addWriteFiles();
+    self.link_output_folder = link_output_dir_wf.getDirectory();
+    self.generate_pre_bundle_cmd.addDirectoryArg(self.link_output_folder);
+    self.generate_pre_bundle_cmd.addArg("-I");
+    self.generate_pre_bundle_cmd.addFileArg(.{
         .path = b.pathJoin(&.{
             android_sdk.android_sdk_root,
             "platforms",
@@ -93,17 +99,18 @@ pub fn create(
             "android.jar",
         }),
     });
-    self.generate_pre_bundle_cmd.?.addArg("--manifest");
-    self.generate_pre_bundle_cmd.?.addFileArg(manifest.files.getLast().getPath());
-    self.generate_pre_bundle_cmd.?.addArg("-R");
-    self.generate_pre_bundle_cmd.?.step.dependOn(&self.list_files_from_compiled_resources_step);
+    self.generate_pre_bundle_cmd.addArg("--manifest");
+    self.generate_pre_bundle_cmd.addFileArg(manifest.files.getLast().getPath());
+    self.generate_pre_bundle_cmd.addArg("-R");
+    self.generate_pre_bundle_cmd.step.dependOn(&self.list_files_from_compiled_resources_step);
+    self.generate_pre_bundle_cmd.step.dependOn(&link_output_dir_wf.step);
 
     self.generate_pre_bundle_step = Step.init(.{
         .id = .custom,
         .name = "GeneratePreBundle",
         .owner = b,
     });
-    self.generate_pre_bundle_step.dependOn(&self.generate_pre_bundle_cmd.?.step);
+    self.generate_pre_bundle_step.dependOn(&self.generate_pre_bundle_cmd.step);
 
     self.copy_into_second_pre_bundle_step = Step.init(.{
         .id = .custom,
@@ -113,8 +120,8 @@ pub fn create(
     });
     self.copy_into_second_pre_bundle_step.dependOn(&self.generate_pre_bundle_step);
 
-    self.second_pre_bundle_input_folder = b.addWriteFiles();
-    self.second_pre_bundle_input_folder.?.step.dependOn(&self.copy_into_second_pre_bundle_step);
+    self.second_pre_bundle_input_wf = b.addWriteFiles();
+    self.second_pre_bundle_input_wf.step.dependOn(&self.copy_into_second_pre_bundle_step);
 
     const lib_location = combo_lib.artifact.getEmittedBin();
     const lib_name = combo_lib.artifact.out_lib_filename;
@@ -126,16 +133,22 @@ pub fn create(
         else => @panic("unsupported arch for android build"),
     };
 
-    _ = self.second_pre_bundle_input_folder.?.addCopyFile(
+    _ = self.second_pre_bundle_input_wf.addCopyFile(
         lib_location,
         b.pathJoin(&.{ "lib", lib_dir_name, lib_name }),
     );
 
-    var zip_files = b.addSystemCommand(&.{ "zip", "-D4r" });
+    var zip_files = b.addRunArtifact(zipcreate);
     const output_zip = zip_files.addOutputFileArg("second_pre_bundle.zip");
-    zip_files.addArg(".");
-    zip_files.step.dependOn(&self.second_pre_bundle_input_folder.?.step);
-    zip_files.setCwd(self.second_pre_bundle_input_folder.?.getDirectory());
+    zip_files.addDirectoryArg(self.second_pre_bundle_input_wf.getDirectory());
+    zip_files.addArg("");
+    zip_files.step.dependOn(&self.second_pre_bundle_input_wf.step);
+
+    // var zip_files = b.addSystemCommand(&.{ "zip", "-D4r" });
+    // const output_zip = zip_files.addOutputFileArg("second_pre_bundle.zip");
+    // zip_files.addArg(".");
+    // zip_files.step.dependOn(&self.second_pre_bundle_input_wf.step);
+    // zip_files.setCwd(self.second_pre_bundle_input_wf.getDirectory());
 
     self.generate_second_pre_bundle_step = Step.init(.{
         .id = .custom,
@@ -151,7 +164,7 @@ pub fn create(
     generate_app_bundle_cmd.step.dependOn(&bundletool.step);
     generate_app_bundle_cmd.addFileArg(output_zip);
     generate_app_bundle_cmd.addArg("--output");
-    self.output_aab = generate_app_bundle_cmd.addOutputFileArg(app_name ++ ".aab");
+    self.output_aab = generate_app_bundle_cmd.addOutputFileArg(b.fmt("{s}{s}", .{ app_name, ".aab" }));
 
     self.generate_app_bundle_step = Step.init(.{
         .id = .custom,
@@ -178,8 +191,8 @@ pub fn create(
     generate_apks_cmd.step.dependOn(&self.generate_app_bundle_step);
     generate_apks_cmd.addFileArg(self.output_aab);
     generate_apks_cmd.addArg("--output");
-    self.output_apks = generate_apks_cmd.addOutputFileArg(app_name ++ ".apks");
-    const install_apks = b.addInstallFile(self.output_apks, app_name ++ ".apks");
+    self.output_apks = generate_apks_cmd.addOutputFileArg(b.fmt("{s}{s}", .{ app_name, ".apks" }));
+    const install_apks = b.addInstallFile(self.output_apks, b.fmt("{s}{s}", .{ app_name, ".apks" }));
     install_apks.step.dependOn(&generate_apks_cmd.step);
 
     self.generate_apks_step = Step.init(.{
@@ -199,52 +212,84 @@ pub fn create(
     return self;
 }
 
+const CopyFileReq = struct {
+    src: []u8,
+    dest: []u8,
+};
+
+const Error = error{InvalidFileKind};
+
 fn copyFilesIntoSecondPreBundle(step: *Step, prog_node: *std.Progress.Node) !void {
     _ = prog_node;
 
-    const self: *CreateAndroidAppBundle = @fieldParentPtr("step", step);
+    const self: *CreateAndroidAppBundle = @fieldParentPtr("copy_into_second_pre_bundle_step", step);
     const b = step.owner;
 
-    const prebundle_path = self.link_output_dir.?.getPath(b);
+    const prebundle_path = self.link_output_folder.getPath(b);
 
-    _ = self.second_pre_bundle_input_folder.?.addCopyFile(
+    _ = self.second_pre_bundle_input_wf.addCopyFile(
         .{ .path = b.pathJoin(&.{ prebundle_path, "AndroidManifest.xml" }) },
         "manifest/AndroidManifest.xml",
     );
-    _ = self.second_pre_bundle_input_folder.?.addCopyFile(
+    _ = self.second_pre_bundle_input_wf.addCopyFile(
         .{ .path = b.pathJoin(&.{ prebundle_path, "resources.pb" }) },
         "resources.pb",
     );
 
     const dir_path = b.pathJoin(&.{ prebundle_path, "res" });
 
-    var dir = try fs.openDirAbsolute(dir_path, .{ .iterate = true });
-    defer dir.close();
+    var paths = std.ArrayList(CopyFileReq).init(b.allocator);
+    try paths.append(.{
+        .src = dir_path,
+        .dest = @constCast("res"),
+    });
 
-    var iter = dir.iterate();
-    while (try iter.next()) |*entry| {
-        const name = b.pathJoin(&.{ dir_path, entry.name });
-        _ = self.second_pre_bundle_input_folder.?.addCopyFile(
-            .{ .path = name },
-            b.pathJoin(&.{ "res", entry.name }),
-        );
+    var curr_path = paths.popOrNull();
+    while (curr_path) |p| : (curr_path = paths.popOrNull()) {
+        const local_file = try std.fs.cwd().openFile(p.src, .{ .mode = .read_only });
+        defer local_file.close();
+
+        const local_file_stat = try local_file.stat();
+
+        try switch (local_file_stat.kind) {
+            .file => {
+                _ = self.second_pre_bundle_input_wf.addCopyFile(
+                    .{ .path = p.src },
+                    p.dest,
+                );
+            },
+            .directory => {
+                const local_dir = try std.fs.cwd().openDir(p.src, .{ .iterate = true });
+                var iter = local_dir.iterate();
+
+                while (try iter.next()) |entry| {
+                    try paths.append(.{
+                        .src = b.pathJoin(&.{ p.src, entry.name }),
+                        .dest = b.pathJoin(&.{ p.dest, entry.name }),
+                    });
+                }
+            },
+            else => Error.InvalidFileKind,
+        };
     }
 }
 
 fn addFilesInResourcesToPreBundleCmd(step: *Step, prog_node: *std.Progress.Node) !void {
     _ = prog_node;
 
-    const self: *CreateAndroidAppBundle = @fieldParentPtr("step", step);
+    const self: *CreateAndroidAppBundle = @fieldParentPtr("list_files_from_compiled_resources_step", step);
 
-    const dir_path = self.compiled_resources_dir.?.getPath(step.owner);
+    const dir_path = self.compiled_resources_folder.getPath(step.owner);
     var dir = try fs.openDirAbsolute(dir_path, .{ .iterate = true });
     defer dir.close();
 
     var iter = dir.iterate();
     while (try iter.next()) |*entry| {
+        if (!std.mem.endsWith(u8, entry.name, ".flat")) continue;
+
         const name = step.owner.pathJoin(&.{ dir_path, entry.name });
 
         const lazy_file = .{ .path = name };
-        self.generate_pre_bundle_cmd.?.addFileArg(lazy_file);
+        self.generate_pre_bundle_cmd.addFileArg(lazy_file);
     }
 }

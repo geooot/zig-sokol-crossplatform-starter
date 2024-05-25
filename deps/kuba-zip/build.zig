@@ -20,7 +20,7 @@ pub fn build(b: *Build) !void {
     });
     const entrypoint = translateC.getOutput();
 
-    const kubazipc = b.addModule("kubazip", .{
+    const kubazipc = b.addModule("kubazipc", .{
         .target = target,
         .optimize = optimize,
         .link_libc = true,
@@ -33,10 +33,10 @@ pub fn build(b: *Build) !void {
         .name = "zipcreate",
         .target = target,
         .optimize = optimize,
-        .root_source_file = .{ .path = "src/zip.zig" },
+        .root_source_file = .{ .path = "src/zipcreate.zig" },
     });
 
-    exe.root_module.addImport("kubazip", kubazipc);
+    exe.root_module.addImport("kubazipc", kubazipc);
 
     b.installArtifact(exe);
 }

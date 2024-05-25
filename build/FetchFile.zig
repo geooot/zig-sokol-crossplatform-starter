@@ -56,6 +56,7 @@ fn make(step: *Step, prog_node: *std.Progress.Node) !void {
 
     _ = try client.fetch(.{
         .location = .{ .url = self.url },
+        .max_append_size = 28 * 1024 * 1024, // bundletool.zip is around 28MB
         .response_storage = .{ .dynamic = &body },
     });
 

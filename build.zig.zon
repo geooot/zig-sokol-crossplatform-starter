@@ -15,9 +15,12 @@
     // Once all dependencies are fetched, `zig build` no longer requires
     // internet connectivity.
     .dependencies = .{
-        .@"sokol" = .{
+        .sokol = .{
             .url = "git+https://github.com/floooh/sokol-zig.git#16b83f33ccd865864e6294a97079bcd4769c9e33",
             .hash = "1220bef622a4ebd47ebdbc9f4147bfe1da9a12872328fa9e258618d1e1409958c920",
+        },
+        .kubazip = .{
+            .path = "deps/kuba-zip",
         },
     },
     .paths = .{
