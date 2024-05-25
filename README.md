@@ -7,11 +7,8 @@ Also, taken inspiration from [`kubkon/zig-ios-example`](https://github.com/kubko
 
 ## Clone
 
-> [!IMPORTANT]  
-> This projects uses submodules. Make sure to include them.
-
 ```
-git clone --recurse-submodules https://github.com/geooot/zig-sokol-crossplatform-starter.git
+git clone https://github.com/geooot/zig-sokol-crossplatform-starter.git
 ```
 
 ## Required Dependencies
