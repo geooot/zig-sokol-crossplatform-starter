@@ -16,17 +16,15 @@ git clone --recurse-submodules https://github.com/geooot/zig-sokol-crossplatform
 
 ## Required Dependencies
 
-You will need the latest `0.12.x` (master) release of Zig, you can find it [here](https://ziglang.org/download). Last tested with version `0.12.0-dev.1828+225fe6ddb`. 
+You will need the `0.12` release of Zig, you can find it [here](https://ziglang.org/download). 
 
 For iOS
 - xcode
-- [`xcodegen`](https://github.com/yonaskolb/XcodeGen), which can be installed with `brew install xcodegen`
 - Edit `build.zig` with `APP_NAME` and `BUNDLE_PREFIX` changed as necessary.
 
 For Android
 - [Android SDK](https://developer.android.com/studio) install with `ANDROID_HOME` environment variable set. 
 - Java JDK, and `keytool` (should be included in JDK install). `$JAVA_HOME` should be set to the install location
-- [`bundletool`](https://github.com/google/bundletool), which can be installed with `brew install bundletool`.
 - Edit `build.zig` with `ANDROID_` prefixed constants as necessary. You probably only need to change `*_VERSION` const's to match what you have installed in your android SDK (check `$ANDROID_HOME`).
 - Edit `build.zig` with `APP_NAME` and `BUNDLE_PREFIX` changed as necessary.
 
@@ -68,15 +66,15 @@ Quirks
 ## Things that would be cool to add in the future
 
 In no particular order
-- Move sokol-zig to be a zig dependency rather than a git submodule
-- Can we get rid of the dependency on `xcodegen` and `bundletool`? I think we can at least use zig package manager to fetch those dependencies on build. We need zip support (xcodegen releases itself as a zip file rather than a tarball) and single file download support (bundletool packages itself as a single `.jar`) to make that possible. 
+- [x] Move sokol-zig to be a zig dependency rather than a git submodule
+- [x] Can we get rid of the dependency on `xcodegen` and `bundletool`? I think we can at least use zig package manager to fetch those dependencies on build. We need zip support (xcodegen releases itself as a zip file rather than a tarball) and single file download support (bundletool packages itself as a single `.jar`) to make that possible. 
    - Even crazier idea: reimplement `xcodegen` and `bundletool` as zig libraries.
-- In my sleep I still think about `kubkon/zig-ios-example` since it doesn't require generating a xcode project at all. I think in reality, people might need **some** xcode project generation support, but like...
-- Github Action CI/CD workflows.
-- Add minimal WASM/WASI builds (lets move past emscripten).
+- [ ] In my sleep I still think about `kubkon/zig-ios-example` since it doesn't require generating a xcode project at all. I think in reality, people might need **some** xcode project generation support, but like...
+- [x] Github Action CI/CD workflows.
+- [ ] Add minimal WASM/WASI builds (lets move past emscripten).
 
 ## License
 
 This is Public Domain software with the UNLICENSE license. All code except for the following exceptions are under the UNLICENSE license.
-- `build/auto-detect.zig` falls under the MIT License [[See here]](https://github.com/MasterQ32/ZigAndroidTemplate/blob/master/LICENCE).
-- `deps/sokol-zig` (and sokol in general) fall under the Zlib license [[[See here]]](https://github.com/floooh/sokol/blob/master/LICENSE).
+- `build/auto-detect.zig` falls under the MIT License [[[See here]]](https://github.com/MasterQ32/ZigAndroidTemplate/blob/master/LICENCE).
+- `sokol-zig` (and sokol in general) fall under the Zlib license [[[See here]]](https://github.com/floooh/sokol/blob/master/LICENSE).
