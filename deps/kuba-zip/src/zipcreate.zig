@@ -60,7 +60,6 @@ pub fn main() !u8 {
     while (pair) |p| : (pair = list.popOrNull()) {
         const local_path = p.local_path;
         const zip_dest_path = p.zip_dest_path;
-        std.log.debug("local_path=\"{s}\", zip_dest_path\"{s}\"", .{ local_path, zip_dest_path });
 
         errdefer std.log.err("error while processing local_path=\"{s}\", zip_dest_path\"{s}\"", .{ local_path, zip_dest_path });
 

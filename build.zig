@@ -35,6 +35,8 @@ pub fn build(b: *Build) !void {
     }));
     const optimize = b.standardOptimizeOption(.{});
 
+    const zig_lib_patched = b.dependency("zig-lib-with-patches", .{}).namedWriteFiles("zig-lib-patched");
+
     const android_sdk = try auto_detect.findAndroidSDKConfig(b, &android_arm64_target.result, .{
         .api_version = ANDROID_TARGET_API_VERSION,
         .build_tools_version = ANDROID_BUILD_TOOLS_VERSION,
@@ -66,8 +68,17 @@ pub fn build(b: *Build) !void {
         android_sokol_res.module,
     );
 
+    // override zig std lib to patched version for the android app lib and sokol lib
+    android_combo_lib.artifact.zig_lib_dir = zig_lib_patched.getDirectory();
+    android_combo_lib.artifact.step.dependOn(&zig_lib_patched.step);
+    android_sokol_res.installed_library.artifact.zig_lib_dir = zig_lib_patched.getDirectory();
+    android_sokol_res.installed_library.artifact.step.dependOn(&zig_lib_patched.step);
+
+    // set the android lib c file for app lib and sokol lib
     android_combo_lib.artifact.step.dependOn(&generate_libc_file.step);
     android_combo_lib.artifact.setLibCFile(generate_libc_file.files.getLast().getPath());
+    android_sokol_res.installed_library.artifact.step.dependOn(&generate_libc_file.step);
+    android_sokol_res.installed_library.artifact.setLibCFile(generate_libc_file.files.getLast().getPath());
 
     // generate iOS framework files
     const ios_build_lib_name = "ios_lib" ++ APP_NAME ++ ".xcframework";
@@ -151,6 +162,7 @@ pub fn build(b: *Build) !void {
 
     // android
     const bundletool_install_folder = b.addWriteFiles();
+    bundletool_install_folder.step.name = "Write bundletool jar";
     const bundletool_install_loc = bundletool_install_folder.add("bundletool.jar", "");
     const fetch_bundletool = FetchFile.create(b, BUNDLETOOL_JAR_URL, bundletool_install_loc);
     fetch_bundletool.step.name = "Fetch bundletool";
@@ -353,8 +365,6 @@ fn addCompilePaths(b: *Build, target: Build.ResolvedTarget, step: anytype) !void
         step.addIncludePath(.{ .path = android_sdk.android_ndk_include_host });
         step.addIncludePath(.{ .path = android_sdk.android_ndk_include_host_android });
         step.addIncludePath(.{ .path = android_sdk.android_ndk_include_host_arch_android });
-
-        //step.linkLibC();
 
         step.addLibraryPath(.{ .path = android_sdk.android_ndk_lib_host_arch_android });
     }
