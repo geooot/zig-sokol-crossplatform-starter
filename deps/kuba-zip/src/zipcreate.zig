@@ -1,4 +1,4 @@
-const kz = @import("kubazip");
+const kz = @import("kubazipc");
 const std = @import("std");
 
 const READ_BUFFER_SIZE = 4096;
@@ -71,7 +71,8 @@ pub fn main() !u8 {
 
         try switch (local_file_stat.kind) {
             .file => blk: {
-                if (kz.zip_entry_open(zip, zip_dest_path.ptr) < 0) {
+                const zip_dest_path_c_str: [:0]u8 = @ptrCast(try std.fmt.allocPrint(allocator, "{s}\x00", .{zip_dest_path}));
+                if (kz.zip_entry_open(zip, zip_dest_path_c_str) < 0) {
                     break :blk error.FailedToCreateEntry;
                 }
                 defer _ = kz.zip_entry_close(zip);

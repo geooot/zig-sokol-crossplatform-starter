@@ -66,7 +66,7 @@ pub fn build(b: *Build) !void {
         android_sokol_res.module,
     );
 
-    android_combo_lib.step.dependOn(&generate_libc_file.step);
+    android_combo_lib.artifact.step.dependOn(&generate_libc_file.step);
     android_combo_lib.artifact.setLibCFile(generate_libc_file.files.getLast().getPath());
 
     // generate iOS framework files
@@ -168,6 +168,9 @@ pub fn build(b: *Build) !void {
     );
     generate_android_manifest.step.dependOn(&android_combo_lib.step);
 
+    // zip program for creating android bundle
+    const zipcreate = b.dependency("kubazip", .{}).artifact("zipcreate");
+
     const create_android_app_bundle = CreateAndroidAppBundle.create(
         b,
         APP_NAME,
@@ -176,6 +179,7 @@ pub fn build(b: *Build) !void {
         generate_android_manifest,
         android_sdk,
         fetch_bundletool,
+        zipcreate,
     );
 
     // native build exe
