@@ -200,7 +200,7 @@ pub fn create(
         .name = "GenerateApks",
         .owner = b,
     });
-    self.generate_apks_step.dependOn(&generate_apks_cmd.step);
+    self.generate_apks_step.dependOn(&install_apks.step);
 
     self.step = Step.init(.{
         .id = .custom,
