@@ -218,6 +218,20 @@ pub fn build(b: *Build) !void {
     all_step.dependOn(install_ios);
     all_step.dependOn(install_android);
 
+    // give access to fetched tools
+    const run_bundletool = b.addSystemCommand(&.{ android_sdk.java_exe_path, "-jar" });
+    run_bundletool.addFileArg(bundletool_install_loc);
+    run_bundletool.step.dependOn(&bundletool_install_folder.step);
+    run_bundletool.step.dependOn(&fetch_bundletool.step);
+
+    if (b.args) |args|
+        for (args) |arg| {
+            run_bundletool.addArg(arg);
+        };
+
+    const run_bundletool_step = b.step("bundletool", "Run bundletool");
+    run_bundletool_step.dependOn(&run_bundletool.step);
+
     b.default_step = all_step;
 }
 

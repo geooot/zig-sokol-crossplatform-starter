@@ -38,11 +38,12 @@ $ zig build run      # builds and runs executable on your computer
 $ zig build          # builds everything (iOS, android, your computer)
 
 $ zig build ios      # generates iOS project (in zig-out/MyApp.xcodeproj).
-                     # You have to open xcode and build from there
+                     # - You have to open xcode and build from there
 
 $ zig build android  # builds android apks (in zig-out/MyApp.apks).
-                     # You have to use `bundletool install-apks --apks=MyApp.apks` to install it to a device.
-                     # But you use the `.aab` file when submitting to Google Play.
+                     # - You have to use `zig build bundletool -- install-apks --apks=zig-out/MyApp.apks`
+                     #   to install it to a device.
+                     # - But you use the `.aab` file when submitting to Google Play.
 
 $ zig build default  # builds a executable for your computer
 ```
