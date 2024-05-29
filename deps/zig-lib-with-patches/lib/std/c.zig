@@ -1,6 +1,8 @@
 // This is a modified version of c.zig in zig's std library
+// Modifications marked with [MOD START] and [MOD END]
+//
 // Modifications:
-//  - Add a dummy function for getcontext when target is android, rather than compileError
+//  - Don't include getcontext reference when android
 
 const std = @import("std");
 const builtin = @import("builtin");
@@ -1899,13 +1901,19 @@ pub extern "c" fn setlogmask(maskpri: c_int) c_int;
 
 pub extern "c" fn if_nametoindex([*:0]const u8) c_int;
 
-pub const getcontext = if (native_os == .linux and builtin.target.isMusl())
-    linux.getcontext
-else
-    struct {
-        extern fn getcontext(ucp: *std.posix.ucontext_t) c_int;
-    }.getcontext;
-
+// [MOD START]
+// Reverting this commit https://github.com/ziglang/zig/commit/474d17c13ae9f9f51cb2e7f18d3d61353f1ccd83
+pub usingnamespace if (builtin.target.isAndroid()) struct {
+    // android bionic libc does not implement getcontext,
+    // and std.os.linux.getcontext also cannot be built for
+    // bionic libc currently.
+} else if (native_os == .linux and builtin.target.isMusl()) struct {
+    // musl does not implement getcontext
+    pub const getcontext = std.os.linux.getcontext;
+} else struct {
+    pub extern "c" fn getcontext(ucp: *std.os.ucontext_t) c_int;
+};
+// [MOD END]
 pub const max_align_t = if (native_abi == .msvc)
     f64
 else if (builtin.target.isDarwin())
