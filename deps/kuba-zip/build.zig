@@ -29,14 +29,24 @@ pub fn build(b: *Build) !void {
 
     kubazipc.addCSourceFile(.{ .file = zipcfile });
 
-    const exe = b.addExecutable(.{
+    const zipcreate_exe = b.addExecutable(.{
         .name = "zipcreate",
         .target = target,
         .optimize = optimize,
         .root_source_file = .{ .path = "src/zipcreate.zig" },
     });
 
-    exe.root_module.addImport("kubazipc", kubazipc);
+    zipcreate_exe.root_module.addImport("kubazipc", kubazipc);
 
-    b.installArtifact(exe);
+    const zipextract_exe = b.addExecutable(.{
+        .name = "zipextract",
+        .target = target,
+        .optimize = optimize,
+        .root_source_file = .{ .path = "src/zipextract.zig" },
+    });
+
+    zipextract_exe.root_module.addImport("kubazipc", kubazipc);
+
+    b.installArtifact(zipcreate_exe);
+    b.installArtifact(zipextract_exe);
 }
