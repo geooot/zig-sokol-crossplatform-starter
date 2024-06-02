@@ -63,13 +63,11 @@ pub fn main() !u8 {
 
         errdefer std.log.err("error while processing local_path=\"{s}\", zip_dest_path\"{s}\"", .{ local_path, zip_dest_path });
 
-        const local_file = try std.fs.cwd().openFile(local_path, .{ .mode = .read_only });
-        defer local_file.close();
-
-        const local_file_stat = try local_file.stat();
+        const local_file_stat = try stat(local_path);
 
         try switch (local_file_stat.kind) {
             .file => blk: {
+                const local_file = try std.fs.cwd().openFile(local_path, .{ .mode = .read_only });
                 const zip_dest_path_c_str: [:0]u8 = @ptrCast(try std.fmt.allocPrint(allocator, "{s}\x00", .{zip_dest_path}));
                 if (kz.zip_entry_open(zip, zip_dest_path_c_str) < 0) {
                     break :blk error.FailedToCreateEntry;
@@ -103,4 +101,15 @@ pub fn main() !u8 {
     }
 
     return 0;
+}
+
+fn stat(local_path: []const u8) !std.fs.File.Stat {
+    return std.fs.cwd().statFile(local_path) catch |e| {
+        if (e == error.IsDir) {
+            // probably on windows where the statFile func is busted
+            const dir = try std.fs.cwd().openDir(local_path, .{});
+            return dir.stat();
+        }
+        return e;
+    };
 }
