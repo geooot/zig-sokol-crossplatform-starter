@@ -227,40 +227,9 @@ fn copyFilesIntoSecondPreBundle(step: *Step, prog_node: *std.Progress.Node) !voi
         "resources.pb",
     );
 
-    const dir_path = b.pathJoin(&.{ prebundle_path, "res" });
-
-    var paths = std.ArrayList(CopyFileReq).init(b.allocator);
-    try paths.append(.{
-        .src = dir_path,
-        .dest = @constCast("res"),
-    });
-
-    var curr_path = paths.popOrNull();
-    while (curr_path) |p| : (curr_path = paths.popOrNull()) {
-        const local_file = try std.fs.cwd().openFile(p.src, .{ .mode = .read_only });
-        defer local_file.close();
-
-        const local_file_stat = try local_file.stat();
-
-        try switch (local_file_stat.kind) {
-            .file => {
-                _ = self.second_pre_bundle_input_wf.addCopyFile(
-                    .{ .path = p.src },
-                    p.dest,
-                );
-            },
-            .directory => {
-                const local_dir = try std.fs.cwd().openDir(p.src, .{ .iterate = true });
-                var iter = local_dir.iterate();
-
-                while (try iter.next()) |entry| {
-                    try paths.append(.{
-                        .src = b.pathJoin(&.{ p.src, entry.name }),
-                        .dest = b.pathJoin(&.{ p.dest, entry.name }),
-                    });
-                }
-            },
-            else => Error.InvalidFileKind,
-        };
-    }
+    _ = self.second_pre_bundle_input_wf.addCopyDirectory(
+        .{ .path = b.pathJoin(&.{ prebundle_path, "res" }) },
+        "res",
+        .{},
+    );
 }
