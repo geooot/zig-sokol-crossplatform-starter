@@ -25,9 +25,8 @@ step: Step,
 combo_lib: *std.Build.Step.InstallArtifact,
 manifest_wf: *std.Build.Step.WriteFile,
 
-compiled_resources_folder: std.Build.LazyPath,
 generate_pre_bundle_cmd: *std.Build.Step.Run,
-link_output_folder: std.Build.LazyPath,
+linked_resources_folder: std.Build.LazyPath,
 second_pre_bundle_input_wf: *std.Build.Step.WriteFile,
 
 output_aab: std.Build.LazyPath,
@@ -42,6 +41,7 @@ pub fn create(
     android_sdk: auto_detect.AndroidSDKConfig,
     bundletool: *FetchFile,
     zipcreate: *std.Build.Step.Compile,
+    zipextract: *std.Build.Step.Compile,
 ) *CreateAndroidAppBundle {
     const self = b.allocator.create(CreateAndroidAppBundle) catch @panic("OOM");
     self.combo_lib = combo_lib;
@@ -57,10 +57,7 @@ pub fn create(
     const generate_resources_cmd = b.addSystemCommand(&.{ aapt2_exe_path, "compile", "--dir" });
     generate_resources_cmd.addDirectoryArg(.{ .path = b.pathJoin(&.{ "android", "res" }) });
     generate_resources_cmd.addArg("-o");
-    const compiled_resources_wf = b.addWriteFiles();
-    self.compiled_resources_folder = compiled_resources_wf.getDirectory();
-    generate_resources_cmd.addDirectoryArg(self.compiled_resources_folder);
-    generate_resources_cmd.step.dependOn(&compiled_resources_wf.step);
+    const compiled_resources_zip = generate_resources_cmd.addOutputFileArg("compiled_resources.zip");
     generate_resources_cmd.step.dependOn(&manifest.step);
     generate_resources_cmd.setName("aapt2 compile");
 
@@ -71,25 +68,16 @@ pub fn create(
     });
     self.generate_compiled_resource_step.dependOn(&generate_resources_cmd.step);
 
-    self.list_files_from_compiled_resources_step = Step.init(.{
-        .id = .custom,
-        .name = "ListFilesFromCompiledResources",
-        .owner = b,
-        .makeFn = addFilesInResourcesToPreBundleCmd,
-    });
-    self.list_files_from_compiled_resources_step.dependOn(&self.generate_compiled_resource_step);
-
     self.generate_pre_bundle_cmd = b.addSystemCommand(&.{
         aapt2_exe_path,
         "link",
         "--auto-add-overlay",
         "--proto-format",
-        "--output-to-dir",
         "-o",
     });
-    const link_output_dir_wf = b.addWriteFiles();
-    self.link_output_folder = link_output_dir_wf.getDirectory();
-    self.generate_pre_bundle_cmd.addDirectoryArg(self.link_output_folder);
+    const linked_resources_zip_wf = b.addWriteFiles();
+    const linked_resources_zip = linked_resources_zip_wf.add("linked_resources.zip", "");
+    self.generate_pre_bundle_cmd.addFileArg(linked_resources_zip);
     self.generate_pre_bundle_cmd.addArg("-I");
     self.generate_pre_bundle_cmd.addFileArg(.{
         .path = b.pathJoin(&.{
@@ -101,16 +89,24 @@ pub fn create(
     });
     self.generate_pre_bundle_cmd.addArg("--manifest");
     self.generate_pre_bundle_cmd.addFileArg(manifest.files.getLast().getPath());
-    self.generate_pre_bundle_cmd.addArg("-R");
-    self.generate_pre_bundle_cmd.step.dependOn(&self.list_files_from_compiled_resources_step);
-    self.generate_pre_bundle_cmd.step.dependOn(&link_output_dir_wf.step);
+    self.generate_pre_bundle_cmd.addFileArg(compiled_resources_zip);
+    self.generate_pre_bundle_cmd.step.dependOn(&self.generate_compiled_resource_step);
+    self.generate_pre_bundle_cmd.step.dependOn(&linked_resources_zip_wf.step);
+
+    const linked_resources_wf = b.addWriteFiles();
+
+    const unzip_linked_resources = b.addRunArtifact(zipextract);
+    unzip_linked_resources.addFileArg(linked_resources_zip);
+    unzip_linked_resources.addDirectoryArg(linked_resources_wf.getDirectory());
+    unzip_linked_resources.step.dependOn(&self.generate_pre_bundle_cmd.step);
+    self.linked_resources_folder = linked_resources_wf.getDirectory();
 
     self.generate_pre_bundle_step = Step.init(.{
         .id = .custom,
         .name = "GeneratePreBundle",
         .owner = b,
     });
-    self.generate_pre_bundle_step.dependOn(&self.generate_pre_bundle_cmd.step);
+    self.generate_pre_bundle_step.dependOn(&unzip_linked_resources.step);
 
     self.copy_into_second_pre_bundle_step = Step.init(.{
         .id = .custom,
@@ -138,31 +134,26 @@ pub fn create(
         b.pathJoin(&.{ "lib", lib_dir_name, lib_name }),
     );
 
-    var zip_files = b.addRunArtifact(zipcreate);
-    const output_zip = zip_files.addOutputFileArg("second_pre_bundle.zip");
-    zip_files.addDirectoryArg(self.second_pre_bundle_input_wf.getDirectory());
-    zip_files.addArg("");
-    zip_files.step.dependOn(&self.second_pre_bundle_input_wf.step);
-
-    // var zip_files = b.addSystemCommand(&.{ "zip", "-D4r" });
-    // const output_zip = zip_files.addOutputFileArg("second_pre_bundle.zip");
-    // zip_files.addArg(".");
-    // zip_files.step.dependOn(&self.second_pre_bundle_input_wf.step);
-    // zip_files.setCwd(self.second_pre_bundle_input_wf.getDirectory());
+    var zip_pre_bundle = b.addRunArtifact(zipcreate);
+    const zipped_prebundle = zip_pre_bundle.addOutputFileArg("second_pre_bundle.zip");
+    zip_pre_bundle.addDirectoryArg(self.second_pre_bundle_input_wf.getDirectory());
+    zip_pre_bundle.addArg("");
+    zip_pre_bundle.step.dependOn(&self.second_pre_bundle_input_wf.step);
+    zip_pre_bundle.step.dependOn(&self.copy_into_second_pre_bundle_step);
 
     self.generate_second_pre_bundle_step = Step.init(.{
         .id = .custom,
         .name = "GenerateSecondPreBundle",
         .owner = b,
     });
-    self.generate_second_pre_bundle_step.dependOn(&zip_files.step);
+    self.generate_second_pre_bundle_step.dependOn(&zip_pre_bundle.step);
 
     const generate_app_bundle_cmd = b.addSystemCommand(&.{ android_sdk.java_exe_path, "-jar" });
     generate_app_bundle_cmd.addFileArg(bundletool.destination);
     generate_app_bundle_cmd.addArgs(&.{ "build-bundle", "--modules" });
     generate_app_bundle_cmd.step.dependOn(&self.generate_second_pre_bundle_step);
     generate_app_bundle_cmd.step.dependOn(&bundletool.step);
-    generate_app_bundle_cmd.addFileArg(output_zip);
+    generate_app_bundle_cmd.addFileArg(zipped_prebundle);
     generate_app_bundle_cmd.addArg("--output");
     self.output_aab = generate_app_bundle_cmd.addOutputFileArg(b.fmt("{s}{s}", .{ app_name, ".aab" }));
 
@@ -225,7 +216,7 @@ fn copyFilesIntoSecondPreBundle(step: *Step, prog_node: *std.Progress.Node) !voi
     const self: *CreateAndroidAppBundle = @fieldParentPtr("copy_into_second_pre_bundle_step", step);
     const b = step.owner;
 
-    const prebundle_path = self.link_output_folder.getPath(b);
+    const prebundle_path = self.linked_resources_folder.getPath(b);
 
     _ = self.second_pre_bundle_input_wf.addCopyFile(
         .{ .path = b.pathJoin(&.{ prebundle_path, "AndroidManifest.xml" }) },
@@ -271,25 +262,5 @@ fn copyFilesIntoSecondPreBundle(step: *Step, prog_node: *std.Progress.Node) !voi
             },
             else => Error.InvalidFileKind,
         };
-    }
-}
-
-fn addFilesInResourcesToPreBundleCmd(step: *Step, prog_node: *std.Progress.Node) !void {
-    _ = prog_node;
-
-    const self: *CreateAndroidAppBundle = @fieldParentPtr("list_files_from_compiled_resources_step", step);
-
-    const dir_path = self.compiled_resources_folder.getPath(step.owner);
-    var dir = try fs.openDirAbsolute(dir_path, .{ .iterate = true });
-    defer dir.close();
-
-    var iter = dir.iterate();
-    while (try iter.next()) |*entry| {
-        if (!std.mem.endsWith(u8, entry.name, ".flat")) continue;
-
-        const name = step.owner.pathJoin(&.{ dir_path, entry.name });
-
-        const lazy_file = .{ .path = name };
-        self.generate_pre_bundle_cmd.addFileArg(lazy_file);
     }
 }

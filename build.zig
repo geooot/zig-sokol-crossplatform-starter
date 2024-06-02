@@ -182,6 +182,7 @@ pub fn build(b: *Build) !void {
 
     // zip program for creating android bundle
     const zipcreate = b.dependency("kubazip", .{}).artifact("zipcreate");
+    const zipextract = b.dependency("kubazip", .{}).artifact("zipextract");
 
     const create_android_app_bundle = CreateAndroidAppBundle.create(
         b,
@@ -192,6 +193,7 @@ pub fn build(b: *Build) !void {
         android_sdk,
         fetch_bundletool,
         zipcreate,
+        zipextract,
     );
 
     // native build exe
