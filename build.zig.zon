@@ -22,9 +22,6 @@
         .kubazip = .{
             .path = "deps/kuba-zip",
         },
-        .@"zig-lib-with-patches" = .{
-            .path = "deps/zig-lib-with-patches",
-        },
     },
     .paths = .{
         // This makes *all* files, recursively, included in this package. It is generally

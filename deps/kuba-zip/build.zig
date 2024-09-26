@@ -33,7 +33,7 @@ pub fn build(b: *Build) !void {
         .name = "zipcreate",
         .target = target,
         .optimize = optimize,
-        .root_source_file = .{ .path = "src/zipcreate.zig" },
+        .root_source_file = b.path("src/zipcreate.zig"),
     });
 
     zipcreate_exe.root_module.addImport("kubazipc", kubazipc);
@@ -42,7 +42,7 @@ pub fn build(b: *Build) !void {
         .name = "zipextract",
         .target = target,
         .optimize = optimize,
-        .root_source_file = .{ .path = "src/zipextract.zig" },
+        .root_source_file = b.path("src/zipextract.zig"),
     });
 
     zipextract_exe.root_module.addImport("kubazipc", kubazipc);

@@ -28,7 +28,7 @@ pub fn create(
     return self;
 }
 
-fn make(step: *Step, prog_node: *std.Progress.Node) !void {
+fn make(step: *Step, prog_node: std.Progress.Node) !void {
     _ = prog_node;
     const self: *FetchFile = @fieldParentPtr("step", step);
     const allocator = step.owner.allocator;

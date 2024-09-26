@@ -35,8 +35,6 @@ pub fn build(b: *Build) !void {
     }));
     const optimize = b.standardOptimizeOption(.{});
 
-    const zig_lib_patched = b.dependency("zig-lib-with-patches", .{}).namedWriteFiles("zig-lib-patched");
-
     const android_sdk = try auto_detect.findAndroidSDKConfig(b, &android_arm64_target.result, .{
         .api_version = ANDROID_TARGET_API_VERSION,
         .build_tools_version = ANDROID_BUILD_TOOLS_VERSION,
@@ -67,12 +65,6 @@ pub fn build(b: *Build) !void {
         optimize,
         android_sokol_res.module,
     );
-
-    // override zig std lib to patched version for the android app lib and sokol lib
-    android_combo_lib.artifact.zig_lib_dir = zig_lib_patched.getDirectory();
-    android_combo_lib.artifact.step.dependOn(&zig_lib_patched.step);
-    android_sokol_res.installed_library.artifact.zig_lib_dir = zig_lib_patched.getDirectory();
-    android_sokol_res.installed_library.artifact.step.dependOn(&zig_lib_patched.step);
 
     // set the android lib c file for app lib and sokol lib
     android_combo_lib.artifact.step.dependOn(&generate_libc_file.step);
@@ -113,10 +105,10 @@ pub fn build(b: *Build) !void {
 
     // create folder structure for xcode project
     const xcode_proj = b.addWriteFiles();
-    const project_yml_loc = xcode_proj.addCopyFile(.{ .path = b.pathJoin(&.{ "ios", "project.yml" }) }, "project.yml");
+    const project_yml_loc = xcode_proj.addCopyFile(b.path(b.pathJoin(&.{ "ios", "project.yml" })), "project.yml");
 
     const copy_app_ios_sources = b.addSystemCommand(&.{ "cp", "-r" });
-    copy_app_ios_sources.addDirectoryArg(.{ .path = b.pathJoin(&.{ "ios", "src" }) });
+    copy_app_ios_sources.addDirectoryArg(b.path(b.pathJoin(&.{ "ios", "src" })));
     copy_app_ios_sources.addDirectoryArg(xcode_proj.getDirectory());
     copy_app_ios_sources.step.dependOn(&xcode_proj.step);
 
@@ -293,7 +285,7 @@ fn buildExe(
         .name = name,
         .target = target,
         .optimize = optimize,
-        .root_source_file = .{ .path = entrypoint },
+        .root_source_file = b.path(entrypoint),
     });
 
     exe.root_module.addImport("sokol", sokol_module);
@@ -316,9 +308,7 @@ fn buildAppStaticLib(
         .name = name,
         .target = target,
         .optimize = optimize,
-        .root_source_file = .{
-            .path = entrypoint,
-        },
+        .root_source_file = b.path(entrypoint),
     });
 
     lib.root_module.addImport("sokol", sokol_module);
@@ -344,9 +334,7 @@ fn buildAppSharedLib(
         .name = name,
         .target = target,
         .optimize = optimize,
-        .root_source_file = .{
-            .path = entrypoint,
-        },
+        .root_source_file = b.path(entrypoint),
     });
 
     lib.root_module.addImport("sokol", sokol_module);
@@ -359,9 +347,9 @@ fn buildAppSharedLib(
 fn addCompilePaths(b: *Build, target: Build.ResolvedTarget, step: anytype) !void {
     if (target.result.os.tag == .ios) {
         const sysroot = std.zig.system.darwin.getSdk(b.allocator, target.result) orelse b.sysroot;
-        step.addLibraryPath(.{ .path = b.pathJoin(&.{ sysroot orelse "", "/usr/lib" }) }); //(.{ .cwd_relative = "/usr/lib" });
-        step.addIncludePath(.{ .path = b.pathJoin(&.{ sysroot orelse "", "/usr/include" }) }); //(.{ .cwd_relative = "/usr/include" });
-        step.addFrameworkPath(.{ .path = b.pathJoin(&.{ sysroot orelse "", "/System/Library/Frameworks" }) }); //(.{ .cwd_relative = "/System/Library/Frameworks" });
+        step.addLibraryPath(.{ .cwd_relative = b.pathJoin(&.{ sysroot orelse "", "/usr/lib" }) }); //(.{ .cwd_relative = "/usr/lib" });
+        step.addIncludePath(.{ .cwd_relative = b.pathJoin(&.{ sysroot orelse "", "/usr/include" }) }); //(.{ .cwd_relative = "/usr/include" });
+        step.addFrameworkPath(.{ .cwd_relative = b.pathJoin(&.{ sysroot orelse "", "/System/Library/Frameworks" }) }); //(.{ .cwd_relative = "/System/Library/Frameworks" });
     } else if (target.result.isAndroid()) {
         const target_dir_name = switch (target.result.cpu.arch) {
             .aarch64 => "aarch64-linux-android",
@@ -376,13 +364,13 @@ fn addCompilePaths(b: *Build, target: Build.ResolvedTarget, step: anytype) !void
             .ndk_version = ANDROID_NDK_VERSION,
         });
 
-        step.addIncludePath(.{ .path = android_sdk.android_ndk_include });
-        step.addIncludePath(.{ .path = android_sdk.android_ndk_include_android });
-        step.addIncludePath(.{ .path = android_sdk.android_ndk_include_host });
-        step.addIncludePath(.{ .path = android_sdk.android_ndk_include_host_android });
-        step.addIncludePath(.{ .path = android_sdk.android_ndk_include_host_arch_android });
+        step.addIncludePath(.{ .cwd_relative = android_sdk.android_ndk_include });
+        step.addIncludePath(.{ .cwd_relative = android_sdk.android_ndk_include_android });
+        step.addIncludePath(.{ .cwd_relative = android_sdk.android_ndk_include_host });
+        step.addIncludePath(.{ .cwd_relative = android_sdk.android_ndk_include_host_android });
+        step.addIncludePath(.{ .cwd_relative = android_sdk.android_ndk_include_host_arch_android });
 
-        step.addLibraryPath(.{ .path = android_sdk.android_ndk_lib_host_arch_android });
+        step.addLibraryPath(.{ .cwd_relative = android_sdk.android_ndk_lib_host_arch_android });
     }
 }
 

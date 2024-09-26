@@ -3,6 +3,7 @@
 //
 //  Shader with uniform data.
 //------------------------------------------------------------------------------
+const std = @import("std");
 const sokol = @import("sokol");
 const slog = sokol.log;
 const sg = sokol.gfx;

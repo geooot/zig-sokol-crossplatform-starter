@@ -55,7 +55,7 @@ pub fn create(
     });
 
     const generate_resources_cmd = b.addSystemCommand(&.{ aapt2_exe_path, "compile", "--dir" });
-    generate_resources_cmd.addDirectoryArg(.{ .path = b.pathJoin(&.{ "android", "res" }) });
+    generate_resources_cmd.addDirectoryArg(b.path(b.pathJoin(&.{ "android", "res" })));
     generate_resources_cmd.addArg("-o");
     const compiled_resources_zip = generate_resources_cmd.addOutputFileArg("compiled_resources.zip");
     generate_resources_cmd.step.dependOn(&manifest.step);
@@ -80,7 +80,7 @@ pub fn create(
     self.generate_pre_bundle_cmd.addFileArg(linked_resources_zip);
     self.generate_pre_bundle_cmd.addArg("-I");
     self.generate_pre_bundle_cmd.addFileArg(.{
-        .path = b.pathJoin(&.{
+        .cwd_relative = b.pathJoin(&.{
             android_sdk.android_sdk_root,
             "platforms",
             b.fmt("android-{s}", .{android_sdk.toolchain_version.api_version}),
@@ -210,7 +210,7 @@ const CopyFileReq = struct {
 
 const Error = error{InvalidFileKind};
 
-fn copyFilesIntoSecondPreBundle(step: *Step, prog_node: *std.Progress.Node) !void {
+fn copyFilesIntoSecondPreBundle(step: *Step, prog_node: std.Progress.Node) !void {
     _ = prog_node;
 
     const self: *CreateAndroidAppBundle = @fieldParentPtr("copy_into_second_pre_bundle_step", step);
@@ -219,16 +219,16 @@ fn copyFilesIntoSecondPreBundle(step: *Step, prog_node: *std.Progress.Node) !voi
     const prebundle_path = self.linked_resources_folder.getPath(b);
 
     _ = self.second_pre_bundle_input_wf.addCopyFile(
-        .{ .path = b.pathJoin(&.{ prebundle_path, "AndroidManifest.xml" }) },
+        .{ .cwd_relative = b.pathJoin(&.{ prebundle_path, "AndroidManifest.xml" }) },
         "manifest/AndroidManifest.xml",
     );
     _ = self.second_pre_bundle_input_wf.addCopyFile(
-        .{ .path = b.pathJoin(&.{ prebundle_path, "resources.pb" }) },
+        .{ .cwd_relative = b.pathJoin(&.{ prebundle_path, "resources.pb" }) },
         "resources.pb",
     );
 
     _ = self.second_pre_bundle_input_wf.addCopyDirectory(
-        .{ .path = b.pathJoin(&.{ prebundle_path, "res" }) },
+        .{ .cwd_relative = b.pathJoin(&.{ prebundle_path, "res" }) },
         "res",
         .{},
     );
