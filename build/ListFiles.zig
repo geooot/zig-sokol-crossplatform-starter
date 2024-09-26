@@ -48,7 +48,7 @@ fn make(step: *Step, prog_node: *std.Progress.Node) !void {
     while (try iter.next()) |*entry| {
         const name = step.owner.pathJoin(&.{ dir_path, entry.name });
 
-        const lazy_file = .{ .path = name };
+        const lazy_file = step.owner.path(name);
         self.callback(lazy_file, self.state);
     }
 
