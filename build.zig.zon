@@ -16,8 +16,8 @@
     // internet connectivity.
     .dependencies = .{
         .sokol = .{
-            .url = "git+https://github.com/floooh/sokol-zig.git#16b83f33ccd865864e6294a97079bcd4769c9e33",
-            .hash = "1220bef622a4ebd47ebdbc9f4147bfe1da9a12872328fa9e258618d1e1409958c920",
+            .url = "git+https://github.com/floooh/sokol-zig.git#89c48425f694ed2516566e0e1681adc6ac64a0ef",
+            .hash = "12203c57bd30a5554d1e2545fe9005874150e4ee51bb8381e4dee8a1c8d91df012db",
         },
         .kubazip = .{
             .path = "deps/kuba-zip",
