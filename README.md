@@ -13,7 +13,7 @@ git clone https://github.com/geooot/zig-sokol-crossplatform-starter.git
 
 ## Required Dependencies
 
-You will need the `0.13` release of Zig, you can find it [here](https://ziglang.org/download). 
+You will need the `0.14` release of Zig, you can find it [here](https://ziglang.org/download). 
 
 For iOS
 - xcode

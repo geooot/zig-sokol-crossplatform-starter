@@ -3,7 +3,6 @@
 //
 //  Shader with uniform data.
 //------------------------------------------------------------------------------
-const std = @import("std");
 const sokol = @import("sokol");
 const slog = sokol.log;
 const sg = sokol.gfx;
@@ -78,18 +77,21 @@ export fn init() void {
     });
 
     // shader and pipeline object
-    var pip_desc: sg.PipelineDesc = .{
+    state.pip = sg.makePipeline(.{
         .shader = sg.makeShader(shd.cubeShaderDesc(sg.queryBackend())),
+        .layout = init: {
+            var l = sg.VertexLayoutState{};
+            l.attrs[shd.ATTR_cube_position].format = .FLOAT3;
+            l.attrs[shd.ATTR_cube_color0].format = .FLOAT4;
+            break :init l;
+        },
         .index_type = .UINT16,
         .depth = .{
             .compare = .LESS_EQUAL,
             .write_enabled = true,
         },
         .cull_mode = .BACK,
-    };
-    pip_desc.layout.attrs[shd.ATTR_vs_position].format = .FLOAT3;
-    pip_desc.layout.attrs[shd.ATTR_vs_color0].format = .FLOAT4;
-    state.pip = sg.makePipeline(pip_desc);
+    });
 
     // framebuffer clear color
     state.pass_action.colors[0] = .{ .load_action = .CLEAR, .clear_value = .{ .r = 0.25, .g = 0.5, .b = 0.75, .a = 1 } };
@@ -104,7 +106,7 @@ export fn frame() void {
     sg.beginPass(.{ .action = state.pass_action, .swapchain = sglue.swapchain() });
     sg.applyPipeline(state.pip);
     sg.applyBindings(state.bind);
-    sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
+    sg.applyUniforms(shd.UB_vs_params, sg.asRange(&vs_params));
     sg.draw(0, 36, 1);
     sg.endPass();
     sg.commit();

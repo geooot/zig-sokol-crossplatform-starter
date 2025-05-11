@@ -42,7 +42,7 @@ pub fn create(
     bundletool: *FetchFile,
     zipcreate: *std.Build.Step.Compile,
     zipextract: *std.Build.Step.Compile,
-) *CreateAndroidAppBundle {
+) !*CreateAndroidAppBundle {
     const self = b.allocator.create(CreateAndroidAppBundle) catch @panic("OOM");
     self.combo_lib = combo_lib;
     self.manifest_wf = manifest;
@@ -88,7 +88,8 @@ pub fn create(
         }),
     });
     self.generate_pre_bundle_cmd.addArg("--manifest");
-    self.generate_pre_bundle_cmd.addFileArg(manifest.files.getLast().getPath());
+    const manifest_lazy_path = try manifest.getDirectory().join(b.allocator, manifest.files.getLast().sub_path);
+    self.generate_pre_bundle_cmd.addFileArg(manifest_lazy_path);
     self.generate_pre_bundle_cmd.addFileArg(compiled_resources_zip);
     self.generate_pre_bundle_cmd.step.dependOn(&self.generate_compiled_resource_step);
     self.generate_pre_bundle_cmd.step.dependOn(&linked_resources_zip_wf.step);
@@ -210,8 +211,8 @@ const CopyFileReq = struct {
 
 const Error = error{InvalidFileKind};
 
-fn copyFilesIntoSecondPreBundle(step: *Step, prog_node: std.Progress.Node) !void {
-    _ = prog_node;
+fn copyFilesIntoSecondPreBundle(step: *Step, make_options: std.Build.Step.MakeOptions) !void {
+    _ = make_options;
 
     const self: *CreateAndroidAppBundle = @fieldParentPtr("copy_into_second_pre_bundle_step", step);
     const b = step.owner;

@@ -24,12 +24,12 @@ const ANDROID_KEYSTORE_KEYPASS = "android";
 pub fn build(b: *Build) !void {
     // targets
     const default_target = b.standardTargetOptions(.{});
-    const native_target = b.resolveTargetQuery(try std.zig.CrossTarget.parse(.{ .arch_os_abi = "native" }));
-    const ios_target = b.resolveTargetQuery(try std.zig.CrossTarget.parse(.{ .arch_os_abi = "aarch64-ios" }));
-    const ios_sim_target = b.resolveTargetQuery(try std.zig.CrossTarget.parse(.{
+    const native_target = b.resolveTargetQuery(try std.Target.Query.parse(.{ .arch_os_abi = "native" }));
+    const ios_target = b.resolveTargetQuery(try std.Target.Query.parse(.{ .arch_os_abi = "aarch64-ios" }));
+    const ios_sim_target = b.resolveTargetQuery(try std.Target.Query.parse(.{
         .arch_os_abi = if (native_target.result.cpu.arch.isAARCH64()) "aarch64-ios-simulator" else "x86_64-ios-simulator",
     }));
-    const android_arm64_target = b.resolveTargetQuery(try std.zig.CrossTarget.parse(.{
+    const android_arm64_target = b.resolveTargetQuery(try std.Target.Query.parse(.{
         .arch_os_abi = "aarch64-linux-android",
         .cpu_features = "baseline+v8a",
     }));
@@ -67,10 +67,13 @@ pub fn build(b: *Build) !void {
     );
 
     // set the android lib c file for app lib and sokol lib
+    const lib_c_lazy_path = try generate_libc_file.getDirectory().join(b.allocator, generate_libc_file.files.getLast().sub_path);
+
     android_combo_lib.artifact.step.dependOn(&generate_libc_file.step);
-    android_combo_lib.artifact.setLibCFile(generate_libc_file.files.getLast().getPath());
+    android_combo_lib.artifact.setLibCFile(lib_c_lazy_path);
+
     android_sokol_res.installed_library.artifact.step.dependOn(&generate_libc_file.step);
-    android_sokol_res.installed_library.artifact.setLibCFile(generate_libc_file.files.getLast().getPath());
+    android_sokol_res.installed_library.artifact.setLibCFile(lib_c_lazy_path);
 
     // generate iOS framework files
     const ios_build_lib_name = "ios_lib" ++ APP_NAME ++ ".xcframework";
@@ -176,7 +179,7 @@ pub fn build(b: *Build) !void {
     const zipcreate = b.dependency("kubazip", .{}).artifact("zipcreate");
     const zipextract = b.dependency("kubazip", .{}).artifact("zipextract");
 
-    const create_android_app_bundle = CreateAndroidAppBundle.create(
+    const create_android_app_bundle = try CreateAndroidAppBundle.create(
         b,
         APP_NAME,
         install_keystore,
@@ -232,7 +235,7 @@ pub fn build(b: *Build) !void {
 fn getEntrypointFile(target: Build.ResolvedTarget) ![]const u8 {
     var entrypoint: []const u8 = "main.zig";
 
-    if (target.result.isAndroid()) {
+    if (target.result.abi.isAndroid()) {
         entrypoint = "main.android.zig";
     }
     return entrypoint;
@@ -350,7 +353,7 @@ fn addCompilePaths(b: *Build, target: Build.ResolvedTarget, step: anytype) !void
         step.addLibraryPath(.{ .cwd_relative = b.pathJoin(&.{ sysroot orelse "", "/usr/lib" }) }); //(.{ .cwd_relative = "/usr/lib" });
         step.addIncludePath(.{ .cwd_relative = b.pathJoin(&.{ sysroot orelse "", "/usr/include" }) }); //(.{ .cwd_relative = "/usr/include" });
         step.addFrameworkPath(.{ .cwd_relative = b.pathJoin(&.{ sysroot orelse "", "/System/Library/Frameworks" }) }); //(.{ .cwd_relative = "/System/Library/Frameworks" });
-    } else if (target.result.isAndroid()) {
+    } else if (target.result.abi.isAndroid()) {
         const target_dir_name = switch (target.result.cpu.arch) {
             .aarch64 => "aarch64-linux-android",
             .x86_64 => "x86_64-linux-android",
